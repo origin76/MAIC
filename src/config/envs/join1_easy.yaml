@@ -1,0 +1,23 @@
+env: join1
+
+env_args:
+  n_agents: 3
+  state_numbers: [1, 2, 3]
+  reward_win: 10
+  obs_last_action: False
+  state_last_action: False
+  print_rew: False
+  is_print: False
+  print_steps: 1000
+
+# A lighter-weight Join1 setup for fast debugging and ablations.
+# Compared with the default Join1 config, this version shortens the horizon
+# and reduces coordination difficulty so algorithm changes can be validated
+# quickly before moving back to the harder setting.
+learner_log_interval: 2000
+log_interval: 2000
+runner_log_interval: 2000
+t_max: 500000
+test_interval: 2000
+test_nepisode: 50
+test_greedy: True

@@ -1,4 +1,4 @@
-from numpy.lib.ufunclike import isposinf
+from numpy import isposinf
 from smac.env.multiagentenv import MultiAgentEnv
 import numpy as np
 import gym
