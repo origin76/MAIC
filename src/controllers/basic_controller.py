@@ -68,8 +68,9 @@ class BasicMAC:
     def save_models(self, path):
         th.save(self.agent.state_dict(), "{}/agent.th".format(path))
 
-    def load_models(self, path):
-        self.agent.load_state_dict(th.load("{}/agent.th".format(path), map_location=lambda storage, loc: storage))
+    def load_models(self, path, strict=True):
+        state_dict = th.load("{}/agent.th".format(path), map_location=lambda storage, loc: storage)
+        return self.agent.load_state_dict(state_dict, strict=strict)
 
     def _build_agents(self, input_shape):
         self.agent = agent_REGISTRY[self.args.agent](input_shape, self.args)

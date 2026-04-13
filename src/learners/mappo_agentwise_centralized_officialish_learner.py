@@ -1,3 +1,5 @@
+import os
+
 import torch as th
 from torch.optim import Adam
 
@@ -262,3 +264,17 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             self.value_normalizer.load_state_dict(
                 th.load("{}/value_norm.th".format(path), map_location=lambda storage, loc: storage)
             )
+
+    def init_models(self, path, strict=False, load_actor=True, load_critic=True, load_value_norm=True, **kwargs):
+        report = super().init_models(path, strict=strict, load_actor=load_actor, load_critic=load_critic)
+
+        if load_value_norm and self.value_normalizer is not None:
+            value_norm_path = "{}/value_norm.th".format(path)
+            if os.path.exists(value_norm_path):
+                value_norm_state = th.load(value_norm_path, map_location=lambda storage, loc: storage)
+                self.value_normalizer.load_state_dict(value_norm_state)
+                report["value_norm"] = "loaded"
+            else:
+                report["value_norm"] = "missing"
+
+        return report

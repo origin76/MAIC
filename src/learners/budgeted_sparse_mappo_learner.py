@@ -1,3 +1,5 @@
+import os
+
 import torch as th
 from torch.optim import Adam
 
@@ -224,3 +226,19 @@ class BudgetedSparseMAPPOLearner:
         self.critic.load_state_dict(th.load("{}/critic.th".format(path), map_location=lambda storage, loc: storage))
         self.actor_optimiser.load_state_dict(th.load("{}/actor_opt.th".format(path), map_location=lambda storage, loc: storage))
         self.critic_optimiser.load_state_dict(th.load("{}/critic_opt.th".format(path), map_location=lambda storage, loc: storage))
+
+    def init_models(self, path, strict=False, load_actor=True, load_critic=True, **kwargs):
+        report = {}
+
+        if load_actor:
+            report["actor"] = self.mac.load_models(path, strict=strict)
+
+        if load_critic:
+            critic_path = "{}/critic.th".format(path)
+            if os.path.exists(critic_path):
+                critic_state = th.load(critic_path, map_location=lambda storage, loc: storage)
+                report["critic"] = self.critic.load_state_dict(critic_state, strict=strict)
+            else:
+                report["critic"] = "missing"
+
+        return report

@@ -20,6 +20,53 @@ import numpy as np
 import copy as cp
 import random
 
+
+def _resolve_model_path(checkpoint_path, load_step, logger):
+    timesteps = []
+    timestep_to_load = 0
+
+    if not os.path.isdir(checkpoint_path):
+        logger.console_logger.info("Checkpoint directiory {} doesn't exist".format(checkpoint_path))
+        return None, None
+
+    for name in os.listdir(checkpoint_path):
+        full_name = os.path.join(checkpoint_path, name)
+        if os.path.isdir(full_name) and name.isdigit():
+            timesteps.append(int(name))
+
+    if len(timesteps) == 0:
+        logger.console_logger.info("No checkpoint directories found in {}".format(checkpoint_path))
+        return None, None
+
+    if load_step == 0:
+        timestep_to_load = max(timesteps)
+    else:
+        timestep_to_load = min(timesteps, key=lambda x: abs(x - load_step))
+
+    return os.path.join(checkpoint_path, str(timestep_to_load)), timestep_to_load
+
+
+def _log_init_report(logger, report):
+    if not isinstance(report, dict):
+        return
+
+    for name, item in report.items():
+        if isinstance(item, str):
+            logger.console_logger.info("Init {}: {}".format(name, item))
+            continue
+
+        missing = getattr(item, "missing_keys", [])
+        unexpected = getattr(item, "unexpected_keys", [])
+        if len(missing) == 0 and len(unexpected) == 0:
+            logger.console_logger.info("Init {}: loaded with exact match".format(name))
+        else:
+            logger.console_logger.info(
+                "Init {}: {} missing keys, {} unexpected keys".format(
+                    name, len(missing), len(unexpected)
+                )
+            )
+
+
 def run(_run, _config, _log):
 
     # check args sanity
@@ -193,33 +240,35 @@ def run_sequential(args, logger):
         learner.cuda()
 
     if args.checkpoint_path != "":
-
-        timesteps = []
-        timestep_to_load = 0
-
-        if not os.path.isdir(args.checkpoint_path):
-            logger.console_logger.info("Checkpoint directiory {} doesn't exist".format(args.checkpoint_path))
+        model_path, timestep_to_load = _resolve_model_path(args.checkpoint_path, args.load_step, logger)
+        if model_path is None:
             return
-
-        # Go through all files in args.checkpoint_path
-        for name in os.listdir(args.checkpoint_path):
-            full_name = os.path.join(args.checkpoint_path, name)
-            # Check if they are dirs the names of which are numbers
-            if os.path.isdir(full_name) and name.isdigit():
-                timesteps.append(int(name))
-
-        if args.load_step == 0:
-            # choose the max timestep
-            timestep_to_load = max(timesteps)
-        else:
-            # choose the timestep closest to load_step
-            timestep_to_load = min(timesteps, key=lambda x: abs(x - args.load_step))
-
-        model_path = os.path.join(args.checkpoint_path, str(timestep_to_load))
 
         logger.console_logger.info("Loading model from {}".format(model_path))
         learner.load_models(model_path)
         runner.t_env = timestep_to_load
+
+        if args.evaluate or args.save_replay:
+            evaluate_sequential(args, runner)
+            return
+    elif getattr(args, "init_checkpoint_path", "") != "":
+        model_path, timestep_to_load = _resolve_model_path(
+            args.init_checkpoint_path,
+            getattr(args, "init_load_step", 0),
+            logger,
+        )
+        if model_path is None:
+            return
+
+        logger.console_logger.info("Initializing model weights from {}".format(model_path))
+        init_report = learner.init_models(
+            model_path,
+            strict=getattr(args, "init_load_strict", False),
+            load_actor=getattr(args, "init_load_actor", True),
+            load_critic=getattr(args, "init_load_critic", True),
+            load_value_norm=getattr(args, "init_load_value_norm", True),
+        )
+        _log_init_report(logger, init_report)
 
         if args.evaluate or args.save_replay:
             evaluate_sequential(args, runner)
