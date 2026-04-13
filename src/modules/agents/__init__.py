@@ -1,13 +1,35 @@
 REGISTRY = {}
 
 from .rnn_agent import RNNAgent
+from .vanilla_mappo_agent import VanillaMAPPOAgent
 from .maic_agent import MAICAgent
 from .maic_multihead_agent import MAICMultiHeadAgent
 from .maic_v1_agent import MAICV1Agent
 from .budgeted_sparse_mappo_agent import BudgetedSparseMAPPOAgent
+from .budgeted_sparse_mappo_evalnorm_agent import BudgetedSparseMAPPOEvalNormAgent
+from .budgeted_sparse_mappo_noeps_bias1_agent import BudgetedSparseMAPPONoEpsBias1Agent
+from .budgeted_sparse_mappo_semantic_head_v1_agent import BudgetedSparseMAPPOSemanticHeadV1Agent
+from .budgeted_sparse_mappo_semantic_head_v2_agent import BudgetedSparseMAPPOSemanticHeadV2Agent
+from .budgeted_sparse_mappo_semantic_head_v3_integration_agent import BudgetedSparseMAPPOSemanticHeadV3IntegrationAgent
+from .budgeted_sparse_mappo_semantic_head_v4_combat_focus_agent import BudgetedSparseMAPPOSemanticHeadV4CombatFocusAgent
+from .vanilla_mappo_orthogonal_agent import VanillaMAPPOOrthogonalAgent
+from .vanilla_mappo_sparse_comm_agent import VanillaMAPPOSparseCommAgent
+from .vanilla_mappo_sparse_comm_residual_norm_agent import VanillaMAPPOSparseCommResidualNormAgent
+from .vanilla_mappo_sparse_comm_hardattn_agent import VanillaMAPPOSparseCommHardAttnAgent
 
 REGISTRY["rnn"] = RNNAgent
+REGISTRY["vanilla_mappo"] = VanillaMAPPOAgent
 REGISTRY['maic'] = MAICAgent
 REGISTRY["maic_multihead"] = MAICMultiHeadAgent
 REGISTRY["maic_v1"] = MAICV1Agent
 REGISTRY["budgeted_sparse_mappo"] = BudgetedSparseMAPPOAgent
+REGISTRY["budgeted_sparse_mappo_evalnorm"] = BudgetedSparseMAPPOEvalNormAgent
+REGISTRY["budgeted_sparse_mappo_noeps_bias1"] = BudgetedSparseMAPPONoEpsBias1Agent
+REGISTRY["budgeted_sparse_mappo_semantic_head_v1"] = BudgetedSparseMAPPOSemanticHeadV1Agent
+REGISTRY["budgeted_sparse_mappo_semantic_head_v2"] = BudgetedSparseMAPPOSemanticHeadV2Agent
+REGISTRY["budgeted_sparse_mappo_semantic_head_v3_integration"] = BudgetedSparseMAPPOSemanticHeadV3IntegrationAgent
+REGISTRY["budgeted_sparse_mappo_semantic_head_v4_combat_focus"] = BudgetedSparseMAPPOSemanticHeadV4CombatFocusAgent
+REGISTRY["vanilla_mappo_orthogonal"] = VanillaMAPPOOrthogonalAgent
+REGISTRY["vanilla_mappo_sparse_comm"] = VanillaMAPPOSparseCommAgent
+REGISTRY["vanilla_mappo_sparse_comm_residual_norm"] = VanillaMAPPOSparseCommResidualNormAgent
+REGISTRY["vanilla_mappo_sparse_comm_hardattn"] = VanillaMAPPOSparseCommHardAttnAgent

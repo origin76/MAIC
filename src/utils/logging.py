@@ -17,7 +17,10 @@ class Logger:
     def setup_tb(self, directory_name):
         # Import here so it doesn't have to be installed if you don't use it
         from tensorboardX import SummaryWriter
-        self.writer = SummaryWriter(logdir=directory_name)
+        self.writer = SummaryWriter(logdir=directory_name, max_queue=1, flush_secs=1)
+        # Write a bootstrap point immediately so early-crash runs don't look empty.
+        self.writer.add_scalar("meta/run_started", 1.0, 0)
+        self.writer.flush()
         self.use_tb = True
 
     def setup_sacred(self, sacred_run_dict):
@@ -70,4 +73,3 @@ def get_logger():
     logger.setLevel('DEBUG')
 
     return logger
-

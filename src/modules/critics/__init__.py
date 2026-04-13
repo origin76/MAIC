@@ -1,2 +1,4 @@
 from .coma import COMACritic
 from .mappo import MAPPOCritic
+from .mappo_agentwise_centralized import MAPPOAgentWiseCentralizedCritic
+from .mappo_agentwise_centralized_orthogonal import MAPPOAgentWiseCentralizedOrthogonalCritic

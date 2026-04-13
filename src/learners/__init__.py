@@ -7,6 +7,12 @@ from .maic_qplex_learner import MAICQPLEXLearner
 from .maic_multihead_learner import MAICMultiHeadLearner
 from .maic_v1_learner import MAICV1Learner
 from .budgeted_sparse_mappo_learner import BudgetedSparseMAPPOLearner
+from .budgeted_sparse_mappo_semantic_head_v1_learner import BudgetedSparseMAPPOSemanticHeadV1Learner
+from .budgeted_sparse_mappo_semantic_head_v2_learner import BudgetedSparseMAPPOSemanticHeadV2Learner
+from .budgeted_sparse_mappo_vclip_learner import BudgetedSparseMAPPOVClipLearner
+from .mappo_agentwise_centralized_vclip_learner import MAPPOAgentWiseCentralizedVClipLearner
+from .mappo_agentwise_centralized_officialish_learner import MAPPOAgentWiseCentralizedOfficialishLearner
+from .mappo_agentwise_centralized_official_v2_learner import MAPPOAgentWiseCentralizedOfficialV2Learner
 
 REGISTRY = {}
 
@@ -19,3 +25,9 @@ REGISTRY['maic_qplex_learner'] = MAICQPLEXLearner
 REGISTRY["maic_multihead_learner"] = MAICMultiHeadLearner
 REGISTRY["maic_v1_learner"] = MAICV1Learner
 REGISTRY["budgeted_sparse_mappo_learner"] = BudgetedSparseMAPPOLearner
+REGISTRY["budgeted_sparse_mappo_semantic_head_v1_learner"] = BudgetedSparseMAPPOSemanticHeadV1Learner
+REGISTRY["budgeted_sparse_mappo_semantic_head_v2_learner"] = BudgetedSparseMAPPOSemanticHeadV2Learner
+REGISTRY["budgeted_sparse_mappo_vclip_learner"] = BudgetedSparseMAPPOVClipLearner
+REGISTRY["mappo_agentwise_centralized_vclip_learner"] = MAPPOAgentWiseCentralizedVClipLearner
+REGISTRY["mappo_agentwise_centralized_officialish_learner"] = MAPPOAgentWiseCentralizedOfficialishLearner
+REGISTRY["mappo_agentwise_centralized_official_v2_learner"] = MAPPOAgentWiseCentralizedOfficialV2Learner

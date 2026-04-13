@@ -1,0 +1,56 @@
+# --- Budgeted / Sparse MAPPO + Semantic Head V1 (Light Supervision) for 5m_vs_6m ---
+
+action_selector: "multinomial"
+epsilon_start: 0.1
+epsilon_finish: 0.02
+epsilon_anneal_time: 100000
+test_greedy: True
+
+runner: "parallel"
+batch_size_run: 4
+
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "budgeted_sparse_mappo_semantic_head_v1_learner"
+mac: "maic_mac"
+agent: "budgeted_sparse_mappo_semantic_head_v1"
+
+rnn_hidden_dim: 64
+attention_dim: 32
+attention_heads: 2
+comm_value_dim: 4
+comm_topk: 3
+head_budget_loss_weight: 0.0
+log_attention_maps: False
+
+semantic_target_mode: "attack"
+semantic_action_head_idx: 0
+semantic_action_offset: 6
+semantic_aux_hidden_dim: 32
+semantic_action_loss_weight: 0.02
+semantic_aux_warmup_steps: 50000
+semantic_aux_decay_start: 250000
+semantic_aux_decay_end: 600000
+semantic_aux_final_scale: 0.0
+
+ppo_epochs: 8
+ppo_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.03
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0005
+critic_lr: 0.001
+optim_eps: 0.00001
+grad_norm_clip: 10
+
+save_model: True
+save_model_interval: 50000
+
+name: "budgeted_sparse_mappo_sc2_5m6m_semantic_head_v1_light"

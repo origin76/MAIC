@@ -39,6 +39,7 @@ class ParallelRunner:
         self.test_stats = {}
 
         self.log_train_stats_t = -100000
+        self.agent_mask_template = np.ones((self.env_info["n_agents"], 1), dtype=np.float32)
 
     def setup(self, scheme, groups, preprocess, mac):
         self.new_batch = partial(EpisodeBatch, scheme, groups, self.batch_size, self.episode_limit + 1,
@@ -47,6 +48,9 @@ class ParallelRunner:
         self.scheme = scheme
         self.groups = groups
         self.preprocess = preprocess
+        self.use_active_masks = "active_masks" in scheme
+        self.use_masks = "masks" in scheme
+        self.use_bad_masks = "bad_masks" in scheme
 
     def get_env_info(self):
         return self.env_info
@@ -65,17 +69,11 @@ class ParallelRunner:
         for parent_conn in self.parent_conns:
             parent_conn.send(("reset", None))
 
-        pre_transition_data = {
-            "state": [],
-            "avail_actions": [],
-            "obs": []
-        }
+        pre_transition_data = self._new_pre_transition_data()
         # Get the obs, state and avail_actions back
         for parent_conn in self.parent_conns:
             data = parent_conn.recv()
-            pre_transition_data["state"].append(data["state"])
-            pre_transition_data["avail_actions"].append(data["avail_actions"])
-            pre_transition_data["obs"].append(data["obs"])
+            self._append_reset_pre_transition(pre_transition_data, data)
 
         self.batch.update(pre_transition_data, ts=0)
 
@@ -126,11 +124,7 @@ class ParallelRunner:
                 "terminated": []
             }
             # Data for the next step we will insert in order to select an action
-            pre_transition_data = {
-                "state": [],
-                "avail_actions": [],
-                "obs": []
-            }
+            pre_transition_data = self._new_pre_transition_data()
 
             # Receive data back for each unterminated env
             for idx, parent_conn in enumerate(self.parent_conns):
@@ -147,15 +141,13 @@ class ParallelRunner:
                     env_terminated = False
                     if data["terminated"]:
                         final_env_infos.append(data["info"])
-                    if data["terminated"] and not data["info"].get("episode_limit", False):
+                    if data["terminated"] and not self._is_bad_transition(data["info"]):
                         env_terminated = True
                     terminated[idx] = data["terminated"]
                     post_transition_data["terminated"].append((env_terminated,))
 
                     # Data for the next timestep needed to select an action
-                    pre_transition_data["state"].append(data["state"])
-                    pre_transition_data["avail_actions"].append(data["avail_actions"])
-                    pre_transition_data["obs"].append(data["obs"])
+                    self._append_step_pre_transition(pre_transition_data, data)
 
             # Add post_transiton data into the batch
             self.batch.update(post_transition_data, bs=envs_not_terminated, ts=self.t, mark_filled=False)
@@ -208,6 +200,60 @@ class ParallelRunner:
             if k != "n_episodes":
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
+
+    def _new_pre_transition_data(self):
+        data = {
+            "state": [],
+            "avail_actions": [],
+            "obs": []
+        }
+        if getattr(self, "use_active_masks", False):
+            data["active_masks"] = []
+        if getattr(self, "use_masks", False):
+            data["masks"] = []
+        if getattr(self, "use_bad_masks", False):
+            data["bad_masks"] = []
+        return data
+
+    def _append_common_pre_transition(self, pre_transition_data, data):
+        pre_transition_data["state"].append(data["state"])
+        pre_transition_data["avail_actions"].append(data["avail_actions"])
+        pre_transition_data["obs"].append(data["obs"])
+
+    def _append_reset_pre_transition(self, pre_transition_data, data):
+        self._append_common_pre_transition(pre_transition_data, data)
+        if getattr(self, "use_active_masks", False):
+            pre_transition_data["active_masks"].append(self._infer_active_masks(data["avail_actions"]))
+        if getattr(self, "use_masks", False):
+            pre_transition_data["masks"].append(self.agent_mask_template.copy())
+        if getattr(self, "use_bad_masks", False):
+            pre_transition_data["bad_masks"].append(self.agent_mask_template.copy())
+
+    def _append_step_pre_transition(self, pre_transition_data, data):
+        self._append_common_pre_transition(pre_transition_data, data)
+        if getattr(self, "use_active_masks", False):
+            pre_transition_data["active_masks"].append(self._infer_active_masks(data["avail_actions"]))
+        if getattr(self, "use_masks", False):
+            pre_transition_data["masks"].append(self._build_env_mask(data["terminated"]))
+        if getattr(self, "use_bad_masks", False):
+            pre_transition_data["bad_masks"].append(self._build_bad_mask(data["terminated"], data["info"]))
+
+    def _infer_active_masks(self, avail_actions):
+        avail_actions = np.asarray(avail_actions)
+        return (avail_actions.sum(axis=-1, keepdims=True) > 1).astype(np.float32)
+
+    def _build_env_mask(self, terminated):
+        if terminated:
+            return np.zeros_like(self.agent_mask_template)
+        return self.agent_mask_template.copy()
+
+    def _build_bad_mask(self, terminated, info):
+        if terminated and self._is_bad_transition(info):
+            return np.zeros_like(self.agent_mask_template)
+        return self.agent_mask_template.copy()
+
+    def _is_bad_transition(self, info):
+        return bool(info.get("bad_transition", False) or info.get("episode_limit", False))
 
 
 def env_worker(remote, env_fn):
@@ -264,4 +310,3 @@ class CloudpickleWrapper():
     def __setstate__(self, ob):
         import pickle
         self.x = pickle.loads(ob)
-

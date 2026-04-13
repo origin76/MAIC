@@ -1,0 +1,44 @@
+# --- Sparse Multi-Head MAPPO parameters for local SC2 pilot runs ---
+
+action_selector: "multinomial"
+epsilon_start: 0.0
+epsilon_finish: 0.0
+epsilon_anneal_time: 1
+test_greedy: True
+
+runner: "parallel"
+batch_size_run: 4
+
+# Keep PPO close to on-policy while reducing local rollout cost on Mac.
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "budgeted_sparse_mappo_learner"
+mac: "maic_mac"
+agent: "budgeted_sparse_mappo"
+
+rnn_hidden_dim: 64
+attention_dim: 32
+attention_heads: 2
+comm_value_dim: 32
+comm_topk: 4
+head_budget_loss_weight: 0
+log_attention_maps: False
+
+ppo_epochs: 8
+ppo_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.01
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0005
+critic_lr: 0.001
+optim_eps: 0.00001
+grad_norm_clip: 10
+
+name: "budgeted_sparse_mappo_sc2_local"

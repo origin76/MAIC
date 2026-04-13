@@ -95,8 +95,8 @@ class BudgetedSparseMAPPOLearner:
             critic_log_stats.append({
                 "value_loss": value_loss.item(),
                 "critic_grad_norm": critic_grad_norm.item() if hasattr(critic_grad_norm, "item") else float(critic_grad_norm),
-                "return_mean": ((returns * mask).sum() / mask.sum().clamp(min=1.0)).item(),
-                "value_mean": ((values_pred.detach() * mask).sum() / mask.sum().clamp(min=1.0)).item(),
+                "critic_return_mean": ((returns * mask).sum() / mask.sum().clamp(min=1.0)).item(),
+                "critic_value_mean": ((values_pred.detach() * mask).sum() / mask.sum().clamp(min=1.0)).item(),
             })
 
             if extra.get("logs") is not None:

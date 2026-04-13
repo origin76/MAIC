@@ -1,0 +1,52 @@
+# --- Vanilla MAPPO with agent-wise centralized critic, tuned to preserve peak checkpoints ---
+#
+# Design goal:
+# 1. Start from the current strongest semistable baseline.
+# 2. Slightly reduce late-stage policy drift by weakening entropy pressure.
+# 3. Slightly reduce critic update aggressiveness so value fitting does not
+#    keep dragging the policy away from a good mid-training region.
+
+action_selector: "multinomial"
+epsilon_start: 0.0
+epsilon_finish: 0.0
+epsilon_anneal_time: 1
+test_greedy: True
+
+runner: "parallel_local_safe"
+batch_size_run: 4
+env_reset_stagger_sec: 0.0
+
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "mappo_agentwise_centralized_vclip_learner"
+mac: "maic_mac"
+agent: "vanilla_mappo"
+
+rnn_hidden_dim: 64
+
+critic_use_local_obs: True
+critic_use_last_action: True
+critic_use_agent_id: True
+
+ppo_epochs: 6
+ppo_clip_param: 0.2
+value_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.018
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0004
+critic_lr: 0.0006
+optim_eps: 0.00001
+grad_norm_clip: 5
+
+save_model: True
+save_model_interval: 20000
+
+name: "vanilla_mappo_sc2_5m6m_agentwise_centralized_peakkeep"

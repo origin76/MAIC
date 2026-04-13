@@ -70,6 +70,9 @@ def run(_run, _config, _log):
             json_output_direc = os.path.join(dirname(dirname(abspath(__file__))), "results", args.env, alg_name)
         json_exp_direc = os.path.join(json_output_direc, unique_token + '.json')
         print(f'Export tensorboard scalars at {tb_exp_direc} to json file {json_exp_direc}')
+        if hasattr(logger, "writer"):
+            logger.writer.flush()
+            logger.writer.close()
         export_scalar_to_json(tb_exp_direc, json_output_direc, args)
 
     # Clean up after finishing
@@ -90,7 +93,11 @@ def run(_run, _config, _log):
 
 def evaluate_sequential(args, runner):
 
-    for _ in range(args.test_nepisode):
+    # For parallel runners, one `run(test_mode=True)` call already evaluates
+    # `runner.batch_size` episodes. Match the training-time evaluation logic so
+    # `test_nepisode` always denotes the total number of episodes.
+    n_test_runs = max(1, args.test_nepisode // runner.batch_size)
+    for _ in range(n_test_runs):
         runner.run(test_mode=True)
 
     if args.save_replay:
@@ -135,6 +142,13 @@ def run_sequential(args, logger):
         "reward": {"vshape": (1,)},
         "terminated": {"vshape": (1,), "dtype": th.uint8},
     }
+
+    if getattr(args, "use_explicit_active_masks", False) or getattr(args, "use_official_buffer_masks", False):
+        scheme["active_masks"] = {"vshape": (1,), "group": "agents", "dtype": th.float32}
+    if getattr(args, "use_official_buffer_masks", False):
+        scheme["masks"] = {"vshape": (1,), "group": "agents", "dtype": th.float32}
+        scheme["bad_masks"] = {"vshape": (1,), "group": "agents", "dtype": th.float32}
+
     groups = {
         "agents": args.n_agents
     }

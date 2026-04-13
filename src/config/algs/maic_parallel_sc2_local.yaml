@@ -1,0 +1,38 @@
+# --- MAIC with parallel rollout collection for local SC2 pilot runs ---
+
+save_model: False
+save_model_interval: 1000000
+
+action_selector: "epsilon_greedy"
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 50000
+
+runner: "parallel"
+batch_size_run: 4
+
+buffer_size: 5000
+
+target_update_interval: 200
+
+agent_output_type: "q"
+learner: "maic_learner"
+double_q: True
+mixer: "qmix"
+mixing_embed_dim: 32
+hypernet_layers: 2
+hypernet_embed: 64
+
+mac: "maic_mac"
+agent: "maic"
+
+latent_dim: 8
+attention_dim: 32
+nn_hidden_size: 64
+mi_loss_weight: 0.001
+entropy_loss_weight: 0.01
+msg_l1_reg_loss_weight: 0
+var_floor: 0.002
+log_weights: True
+
+name: "maic_parallel_sc2_local"

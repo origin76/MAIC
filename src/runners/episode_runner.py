@@ -44,6 +44,18 @@ class EpisodeRunner:
         self.batch = self.new_batch()
         self.env.reset()
         self.t = 0
+        self.use_active_masks = "active_masks" in self.batch.scheme
+        self.use_masks = "masks" in self.batch.scheme
+        self.use_bad_masks = "bad_masks" in self.batch.scheme
+        self.agent_mask_template = np.ones((self.args.n_agents, 1), dtype=np.float32)
+
+        pre_transition_data = {
+            "state": [self.env.get_state()],
+            "avail_actions": [self.env.get_avail_actions()],
+            "obs": [self.env.get_obs()]
+        }
+        self._append_initial_mask_fields(pre_transition_data)
+        self.batch.update(pre_transition_data, ts=0)
 
     def run(self, test_mode=False):
         self.reset()
@@ -53,15 +65,6 @@ class EpisodeRunner:
         self.mac.init_hidden(batch_size=self.batch_size)
 
         while not terminated:
-
-            pre_transition_data = {
-                "state": [self.env.get_state()],
-                "avail_actions": [self.env.get_avail_actions()],
-                "obs": [self.env.get_obs()]
-            }
-
-            self.batch.update(pre_transition_data, ts=self.t)
-
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch of size 1
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
@@ -72,19 +75,20 @@ class EpisodeRunner:
             post_transition_data = {
                 "actions": actions,
                 "reward": [(reward,)],
-                "terminated": [(terminated != env_info.get("episode_limit", False),)],
+                "terminated": [(terminated and not self._is_bad_transition(env_info),)],
             }
 
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
 
-        last_data = {
-            "state": [self.env.get_state()],
-            "avail_actions": [self.env.get_avail_actions()],
-            "obs": [self.env.get_obs()]
-        }
-        self.batch.update(last_data, ts=self.t)
+            next_transition_data = {
+                "state": [self.env.get_state()],
+                "avail_actions": [self.env.get_avail_actions()],
+                "obs": [self.env.get_obs()]
+            }
+            self._append_step_mask_fields(next_transition_data, terminated, env_info)
+            self.batch.update(next_transition_data, ts=self.t)
 
         # Select actions in the last stored state
         actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
@@ -122,3 +126,34 @@ class EpisodeRunner:
             if k != "n_episodes":
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
+
+    def _append_initial_mask_fields(self, data):
+        avail_actions = data["avail_actions"][0]
+        if self.use_active_masks:
+            data["active_masks"] = [self._infer_active_masks(avail_actions)]
+        if self.use_masks:
+            data["masks"] = [self.agent_mask_template.copy()]
+        if self.use_bad_masks:
+            data["bad_masks"] = [self.agent_mask_template.copy()]
+
+    def _append_step_mask_fields(self, data, terminated, env_info):
+        avail_actions = data["avail_actions"][0]
+        if self.use_active_masks:
+            data["active_masks"] = [self._infer_active_masks(avail_actions)]
+        if self.use_masks:
+            if terminated:
+                data["masks"] = [np.zeros_like(self.agent_mask_template)]
+            else:
+                data["masks"] = [self.agent_mask_template.copy()]
+        if self.use_bad_masks:
+            if terminated and self._is_bad_transition(env_info):
+                data["bad_masks"] = [np.zeros_like(self.agent_mask_template)]
+            else:
+                data["bad_masks"] = [self.agent_mask_template.copy()]
+
+    def _infer_active_masks(self, avail_actions):
+        avail_actions = np.asarray(avail_actions)
+        return (avail_actions.sum(axis=-1, keepdims=True) > 1).astype(np.float32)
+
+    def _is_bad_transition(self, env_info):
+        return bool(env_info.get("bad_transition", False) or env_info.get("episode_limit", False))
