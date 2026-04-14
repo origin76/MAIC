@@ -17,12 +17,20 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         self.residual_comm_scale = getattr(args, "residual_comm_scale", 0.1)
         self.comm_detach_backbone = getattr(args, "comm_detach_backbone", True)
         self.adapter_gate_init_bias = getattr(args, "adapter_gate_init_bias", -2.5)
+        self.adapter_gate_floor = getattr(args, "adapter_gate_floor", 0.0)
         self.adapter_zero_init = getattr(args, "adapter_zero_init", True)
+        self.adapter_input_gain = getattr(args, "adapter_input_gain", 1.0)
         self.attention_entropy_loss_weight = getattr(args, "attention_entropy_loss_weight", 0.0)
         self.comm_lr_multiplier = getattr(args, "comm_lr_multiplier", 1.0)
+        self.comm_value_source = getattr(args, "comm_value_source", "hidden")
+        self.intent_use_probs = getattr(args, "intent_use_probs", True)
+        self.intent_detach = getattr(args, "intent_detach", True)
+        self.intent_mask_unavailable = getattr(args, "intent_mask_unavailable", True)
 
         if self.attention_dim % self.attention_heads != 0:
             raise ValueError("attention_dim must be divisible by attention_heads")
+        if self.comm_value_source not in ("hidden", "action_intent"):
+            raise ValueError("comm_value_source must be 'hidden' or 'action_intent'")
 
         self.head_dim = self.attention_dim // self.attention_heads
         hidden_dim = args.rnn_hidden_dim
@@ -34,6 +42,7 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         self.query_proj = nn.Linear(hidden_dim, self.attention_heads * self.head_dim)
         self.key_proj = nn.Linear(hidden_dim, self.attention_heads * self.head_dim)
         self.value_proj = nn.Linear(hidden_dim, self.attention_heads * self.comm_value_dim)
+        self.intent_proj = nn.Linear(args.n_actions, self.attention_heads * self.comm_value_dim)
 
         self.comm_layer_norm = nn.LayerNorm(flat_comm_dim)
 
@@ -55,6 +64,7 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
             "query_proj",
             "key_proj",
             "value_proj",
+            "intent_proj",
             "comm_layer_norm",
             "adapter_gate",
             "residual_proj",
@@ -73,12 +83,32 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         h_in = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
         h = self.rnn(x, h_in)
         agent_hidden = h.reshape(bs, self.n_agents, -1)
+        avail_actions = kwargs.get("avail_actions", None)
 
         comm_source = agent_hidden.detach() if self.comm_detach_backbone else agent_hidden
 
         queries = self.query_proj(comm_source).reshape(bs, self.n_agents, self.attention_heads, self.head_dim)
         keys = self.key_proj(comm_source).reshape(bs, self.n_agents, self.attention_heads, self.head_dim)
-        values = self.value_proj(comm_source).reshape(bs, self.n_agents, self.attention_heads, self.comm_value_dim)
+        local_action_probs = None
+        if self.comm_value_source == "action_intent":
+            local_logits = self.policy_head(agent_hidden.reshape(bs * self.n_agents, -1)).reshape(bs, self.n_agents, -1)
+            local_action_source = local_logits
+            if self.intent_use_probs:
+                if avail_actions is not None and self.intent_mask_unavailable and getattr(self.args, "mask_before_softmax", True):
+                    masked_logits = local_logits.masked_fill(avail_actions == 0, -1e10)
+                else:
+                    masked_logits = local_logits
+                local_action_probs = F.softmax(masked_logits, dim=-1)
+                local_action_source = local_action_probs
+
+            if self.intent_detach:
+                local_action_source = local_action_source.detach()
+
+            values = self.intent_proj(local_action_source).reshape(
+                bs, self.n_agents, self.attention_heads, self.comm_value_dim
+            )
+        else:
+            values = self.value_proj(comm_source).reshape(bs, self.n_agents, self.attention_heads, self.comm_value_dim)
 
         scores = (queries.unsqueeze(2) * keys.unsqueeze(1)).sum(dim=-1) / (self.head_dim ** 0.5)
         self_mask = th.eye(self.n_agents, device=scores.device, dtype=th.bool).view(1, self.n_agents, self.n_agents, 1)
@@ -91,11 +121,13 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         normed_messages = self.comm_layer_norm(flat_messages)
 
         gate_input = th.cat([comm_source, normed_messages], dim=-1)
-        adapter_gate = th.sigmoid(
+        raw_adapter_gate = th.sigmoid(
             self.adapter_gate(gate_input.reshape(bs * self.n_agents, -1))
         ).reshape(bs, self.n_agents, 1)
+        adapter_gate = self.adapter_gate_floor + (1.0 - self.adapter_gate_floor) * raw_adapter_gate
 
-        residual_update = self.residual_proj(normed_messages.reshape(bs * self.n_agents, -1)).reshape(bs, self.n_agents, -1)
+        residual_inputs = self.adapter_input_gain * normed_messages
+        residual_update = self.residual_proj(residual_inputs.reshape(bs * self.n_agents, -1)).reshape(bs, self.n_agents, -1)
         residual_update = residual_update * (self.residual_comm_scale * adapter_gate)
 
         fused_hidden = agent_hidden + residual_update
@@ -112,8 +144,11 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
                     flat_messages,
                     normed_messages,
                     adapter_gate,
+                    raw_adapter_gate,
                     residual_update,
+                    residual_inputs,
                     attention_entropy,
+                    local_action_probs=local_action_probs,
                 )
 
         return logits, h, returns
@@ -178,7 +213,18 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
             },
         ]
 
-    def build_logging_payload(self, alpha, flat_messages, normed_messages, adapter_gate, residual_update, attention_entropy):
+    def build_logging_payload(
+        self,
+        alpha,
+        flat_messages,
+        normed_messages,
+        adapter_gate,
+        raw_adapter_gate,
+        residual_update,
+        residual_inputs,
+        attention_entropy,
+        local_action_probs=None,
+    ):
         logs = {}
         detached_alpha = alpha.detach()
         head_entropy = -(
@@ -190,9 +236,13 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         logs["Scalar_attention_entropy_loss_weight"] = th.tensor(
             float(self.attention_entropy_loss_weight), device=alpha.device
         )
+        logs["Scalar_adapter_gate_raw_mean"] = raw_adapter_gate.detach().mean()
         logs["Scalar_adapter_gate_mean"] = adapter_gate.detach().mean()
+        logs["Scalar_adapter_gate_floor"] = th.tensor(float(self.adapter_gate_floor), device=alpha.device)
+        logs["Scalar_adapter_input_gain"] = th.tensor(float(self.adapter_input_gain), device=alpha.device)
         logs["Scalar_raw_message_norm"] = flat_messages.detach().norm(dim=-1).mean()
         logs["Scalar_adapter_message_norm"] = normed_messages.detach().norm(dim=-1).mean()
+        logs["Scalar_adapter_residual_input_norm"] = residual_inputs.detach().norm(dim=-1).mean()
         logs["Scalar_adapter_residual_norm"] = residual_update.detach().norm(dim=-1).mean()
         logs["Scalar_message_norm"] = logs["Scalar_adapter_message_norm"]
         logs["Scalar_residual_norm"] = logs["Scalar_adapter_residual_norm"]
@@ -200,6 +250,12 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
             float(min(max(1, self.topk), max(1, self.n_agents - 1))) / float(max(1, self.n_agents - 1)),
             device=alpha.device,
         )
+        if local_action_probs is not None:
+            detached_probs = th.clamp(local_action_probs.detach(), min=1e-8)
+            intent_entropy = -(detached_probs * th.log(detached_probs)).sum(dim=-1).mean()
+            top1_mass = detached_probs.max(dim=-1)[0].mean()
+            logs["Scalar_intent_entropy"] = intent_entropy
+            logs["Scalar_intent_top1_mass"] = top1_mass
 
         for head_idx in range(self.attention_heads):
             logs["Scalar_head_{}_entropy".format(head_idx)] = head_entropy[head_idx]
