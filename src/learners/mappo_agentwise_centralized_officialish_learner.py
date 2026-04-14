@@ -26,7 +26,8 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         self.critic = MAPPOAgentWiseCentralizedCritic(scheme, args)
         self.critic_params = list(self.critic.parameters())
 
-        self.actor_optimiser = Adam(self.actor_params, lr=args.lr, eps=args.optim_eps)
+        actor_optim_groups = self._build_actor_optim_groups()
+        self.actor_optimiser = Adam(actor_optim_groups, lr=args.lr, eps=args.optim_eps)
         self.critic_optimiser = Adam(self.critic_params, lr=args.critic_lr, eps=args.optim_eps)
         self.initial_actor_lr = args.lr
         self.initial_critic_lr = args.critic_lr
@@ -44,6 +45,16 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
 
         self.value_normalizer = ValueNorm(1, device="cpu") if self.use_valuenorm else None
         self.log_stats_t = -self.args.learner_log_interval - 1
+
+    def _build_actor_optim_groups(self):
+        if hasattr(self.mac.agent, "get_actor_optim_groups"):
+            return self.mac.agent.get_actor_optim_groups(self.args.lr)
+        return [{
+            "params": self.actor_params,
+            "lr": self.args.lr,
+            "initial_lr": self.args.lr,
+            "group_name": "actor",
+        }]
 
     def train(self, batch, t_env: int, episode_num: int):
         if self.use_linear_lr_decay:
@@ -148,8 +159,10 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 "approx_kl": approx_kl.item(),
                 "clipfrac": clipfrac.item(),
                 "active_agent_ratio": (policy_mask.sum() / mask.expand(-1, -1, self.n_agents).sum().clamp(min=1.0)).item(),
-                "actor_lr": self.actor_optimiser.param_groups[0]["lr"],
+                "actor_lr": self._get_actor_lr_for_group("actor_backbone", default_index=0),
             })
+            if len(self.actor_optimiser.param_groups) > 1:
+                actor_log_stats[-1]["comm_lr"] = self._get_actor_lr_for_group("actor_comm", default_index=1)
             critic_log_stats.append({
                 "value_loss": value_loss.item(),
                 "critic_grad_norm": critic_grad_norm.item() if hasattr(critic_grad_norm, "item") else float(critic_grad_norm),
@@ -233,13 +246,20 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         actor_decay = 1.0 - (1.0 - self.actor_min_lr_ratio) * progress
         critic_decay = 1.0 - (1.0 - self.critic_min_lr_ratio) * progress
 
-        actor_lr = self.initial_actor_lr * actor_decay
         critic_lr = self.initial_critic_lr * critic_decay
 
         for param_group in self.actor_optimiser.param_groups:
-            param_group["lr"] = actor_lr
+            initial_lr = param_group.get("initial_lr", self.initial_actor_lr)
+            param_group["lr"] = initial_lr * actor_decay
         for param_group in self.critic_optimiser.param_groups:
             param_group["lr"] = critic_lr
+
+    def _get_actor_lr_for_group(self, group_name, default_index=0):
+        for idx, param_group in enumerate(self.actor_optimiser.param_groups):
+            if param_group.get("group_name") == group_name:
+                return param_group["lr"]
+        fallback_index = min(default_index, len(self.actor_optimiser.param_groups) - 1)
+        return self.actor_optimiser.param_groups[fallback_index]["lr"]
 
     def cuda(self):
         self.mac.cuda()

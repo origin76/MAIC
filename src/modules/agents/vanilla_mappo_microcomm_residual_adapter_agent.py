@@ -18,6 +18,8 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         self.comm_detach_backbone = getattr(args, "comm_detach_backbone", True)
         self.adapter_gate_init_bias = getattr(args, "adapter_gate_init_bias", -2.5)
         self.adapter_zero_init = getattr(args, "adapter_zero_init", True)
+        self.attention_entropy_loss_weight = getattr(args, "attention_entropy_loss_weight", 0.0)
+        self.comm_lr_multiplier = getattr(args, "comm_lr_multiplier", 1.0)
 
         if self.attention_dim % self.attention_heads != 0:
             raise ValueError("attention_dim must be divisible by attention_heads")
@@ -47,6 +49,15 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, args.n_actions),
+        )
+
+        self._comm_param_prefixes = (
+            "query_proj",
+            "key_proj",
+            "value_proj",
+            "comm_layer_norm",
+            "adapter_gate",
+            "residual_proj",
         )
 
         nn.init.constant_(self.adapter_gate[-1].bias, self.adapter_gate_init_bias)
@@ -91,8 +102,19 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         logits = self.policy_head(fused_hidden.reshape(bs * self.n_agents, -1))
 
         returns = {}
-        if kwargs.get("train_mode", False) and kwargs.get("prepare_for_logging", False):
-            returns["logs"] = self.build_logging_payload(alpha, flat_messages, normed_messages, adapter_gate, residual_update)
+        if kwargs.get("train_mode", False):
+            attention_entropy = self._compute_mean_attention_entropy(alpha)
+            if self.attention_entropy_loss_weight > 0:
+                returns["attention_entropy_loss"] = attention_entropy * self.attention_entropy_loss_weight
+            if kwargs.get("prepare_for_logging", False):
+                returns["logs"] = self.build_logging_payload(
+                    alpha,
+                    flat_messages,
+                    normed_messages,
+                    adapter_gate,
+                    residual_update,
+                    attention_entropy,
+                )
 
         return logits, h, returns
 
@@ -109,7 +131,54 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         scores_perm = scores_perm.masked_fill(~keep_mask, -1e10)
         return scores_perm.permute(0, 1, 3, 2)
 
-    def build_logging_payload(self, alpha, flat_messages, normed_messages, adapter_gate, residual_update):
+    def _compute_mean_attention_entropy(self, alpha):
+        detached_alpha = th.clamp(alpha, min=1e-8)
+        return -(detached_alpha * th.log(detached_alpha)).sum(dim=2).mean()
+
+    def get_actor_optim_groups(self, base_lr):
+        if self.comm_lr_multiplier <= 1.0:
+            return [{
+                "params": list(self.parameters()),
+                "lr": base_lr,
+                "initial_lr": base_lr,
+                "group_name": "actor",
+            }]
+
+        comm_params = []
+        backbone_params = []
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            if name.startswith(self._comm_param_prefixes):
+                comm_params.append(param)
+            else:
+                backbone_params.append(param)
+
+        if len(comm_params) == 0 or len(backbone_params) == 0:
+            return [{
+                "params": list(self.parameters()),
+                "lr": base_lr,
+                "initial_lr": base_lr,
+                "group_name": "actor",
+            }]
+
+        comm_lr = base_lr * self.comm_lr_multiplier
+        return [
+            {
+                "params": backbone_params,
+                "lr": base_lr,
+                "initial_lr": base_lr,
+                "group_name": "actor_backbone",
+            },
+            {
+                "params": comm_params,
+                "lr": comm_lr,
+                "initial_lr": comm_lr,
+                "group_name": "actor_comm",
+            },
+        ]
+
+    def build_logging_payload(self, alpha, flat_messages, normed_messages, adapter_gate, residual_update, attention_entropy):
         logs = {}
         detached_alpha = alpha.detach()
         head_entropy = -(
@@ -117,6 +186,10 @@ class VanillaMAPPOMicroCommResidualAdapterAgent(nn.Module):
         ).sum(dim=2).mean(dim=(0, 1))
 
         logs["Scalar_mean_attn_entropy"] = head_entropy.mean()
+        logs["Scalar_attention_entropy_raw"] = attention_entropy.detach()
+        logs["Scalar_attention_entropy_loss_weight"] = th.tensor(
+            float(self.attention_entropy_loss_weight), device=alpha.device
+        )
         logs["Scalar_adapter_gate_mean"] = adapter_gate.detach().mean()
         logs["Scalar_raw_message_norm"] = flat_messages.detach().norm(dim=-1).mean()
         logs["Scalar_adapter_message_norm"] = normed_messages.detach().norm(dim=-1).mean()
