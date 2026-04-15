@@ -32,6 +32,7 @@ class MAICMAC:
             ep_batch.batch_size,
             test_mode=test_mode,
             avail_actions=avail_actions,
+            raw_obs=ep_batch["obs"][:, t],
             **kwargs
         )
 
