@@ -117,3 +117,10 @@ transfer-gym/
 *.xml
 
 figures/
+*.toc
+*.aux
+*.lof
+*.bbl
+*.blg
+*.out
+*.pdf

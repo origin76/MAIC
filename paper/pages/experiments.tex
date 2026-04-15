@@ -1,0 +1,126 @@
+\chapter{实验结果与分析}
+\echapter{Experimental Results and Analysis}
+
+\section{实验设置与评价指标}
+\esection{Experimental Setup and Metrics}
+
+本文实验主要围绕两个环境展开。其一是原型协作环境 \texttt{join1}，用于快速验证通信机制是否具有基础有效性；其二是 SMAC 基准中的 \texttt{5m\_vs\_6m} 任务，用于评估算法在部分可观测协作微操场景中的实际表现。
+
+为便于对不同方法进行统一比较，本文主要采用以下三个指标：
+\begin{enumerate}
+    \item 峰值胜率（peak），即测试胜率曲线中的最大值，用于衡量方法上限；
+    \item 最终胜率（final），即最后一个有效测试点的胜率，用于衡量训练结束时的结果；
+    \item 末 5 点平均胜率（last5），即最后 5 个测试点的平均值，用于衡量方法后期稳定性。
+\end{enumerate}
+
+需要说明的是，当前阶段论文更关注算法行为和结构结论，硬件平台、完整超参数表和多组重复实验明细将在最终定稿时进一步补全。当前图表主要由脚本 \texttt{scripts/plot\_current\_stage\_report.py} 自动生成，数值分析与图像展示保持一致。
+
+\section{\texttt{join1} 环境中的通信原型验证}
+\esection{Communication Verification in \texttt{join1}}
+
+在正式进入 SMAC 任务之前，本文首先在 \texttt{join1} 环境中检验通信机制的基础有效性。图 \ref{fig:join1} 展示了 \texttt{qmix}、受预算约束的稀疏 MAPPO 方法，以及两组 MAIC 类通信方法在该环境中的测试胜率曲线。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\textwidth]{generated/join1_test_winrate_comparison.png}
+    \caption{\texttt{join1} 环境下不同方法的测试胜率对比}
+    \label{fig:join1}
+\end{figure}
+
+从图中可以看出，受约束的稀疏通信在该环境中具有明显优势，而缺乏有效结构约束的通信方法则可能出现几乎完全失效的情况。这一现象说明，通信机制并不是天然有效的协作增强器；消息编码、路由与融合方式若设计不当，反而会直接破坏训练过程。
+
+该组实验对后续研究具有两点启示。首先，通信结构必须受到约束，尤其应避免高熵平均式的信息聚合。其次，后续研究不应简单追求更强的通信表达能力，而应围绕“消息是否真正有用”这一问题展开。
+
+\section{SMAC \texttt{5m\_vs\_6m} 上的 MAPPO 基线构建}
+\esection{MAPPO Backbone Construction on SMAC \texttt{5m\_vs\_6m}}
+
+在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 主线构建可靠 Backbone。图 \ref{fig:baseline} 展示了两个关键阶段：一是向官方工程风格靠拢后的 \texttt{officialish} 基线，二是在较优 checkpoint 上继续进行 300k warm-start 微调后的控制实验。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth]{generated/baseline_officialish_vs_warmstart.png}
+    \caption{vanilla MAPPO 基线的形成过程：\texttt{officialish} 与 warm-start control 对比}
+    \label{fig:baseline}
+\end{figure}
+
+结果表明，早期 \texttt{officialish} 基线虽然已经具备一定学习能力，但存在明显 seed 敏感性。基于导出曲线统计，其三 seed 的峰值平均仅约为 $0.292$，最终胜率平均约为 $0.125$。相比之下，在较优 checkpoint 上继续进行 300k warm-start 微调后，峰值平均提升至约 $0.854$，最终胜率平均达到约 $0.625$，末 5 点平均约为 $0.642$。这说明当前代码框架中的 vanilla MAPPO 并非无法在该任务上取得较强性能，关键在于实现细节和训练稳定性的对齐。
+
+这一结论为后续通信实验提供了坚实基础。只有当 Backbone 本身具备足够强的协作能力时，通信模块的收益和缺陷才具有分析意义。
+
+\section{v1--v5 轻量通信结构对比}
+\esection{Comparison of v1--v5 Lightweight Communication Variants}
+
+在固定强 Backbone 后，本文依次实现并比较了五类轻量通信结构。图 \ref{fig:v1v5_summary} 展示了不同版本的峰值、最终点与末 5 点平均统计，图 \ref{fig:v1v5_curves} 则给出了若干代表性 run 的测试胜率曲线。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{generated/v1_v5_variant_summary.png}
+    \caption{v1--v5 各通信配置的统计结果对比}
+    \label{fig:v1v5_summary}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{generated/v1_v5_representative_curves.png}
+    \caption{v1--v5 代表性 run 的测试胜率曲线}
+    \label{fig:v1v5_curves}
+\end{figure}
+
+为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。需要指出的是，v3、v4 与 v5 对应的是不同侧重点：v3 在原始峰值能力上最具优势，v4 在结构可解释性上最为清晰，v5 则更强调对移动协同机制的分析。
+
+\begin{table}[htbp]
+    \centering
+    \caption{各阶段代表配置的关键结果对比}
+    \label{tab:main_results}
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        版本 & 代表配置 & peak & final & last5 \\
+        \hline
+        Backbone & warm-start control & 0.854 & 0.625 & 0.642 \\
+        \hline
+        v1 & v1\_end2end & 0.813 & 0.646 & 0.563 \\
+        \hline
+        v2 & v2\_sharp\_soft & 0.854 & 0.667 & 0.583 \\
+        \hline
+        v3 & v3\_end2end & 0.938 & 0.563 & 0.600 \\
+        \hline
+        v4 & v4\_base & 0.813 & 0.750 & 0.613 \\
+        \hline
+        v5 & v5\_top1move\_softplus & 0.771 & 0.688 & 0.588 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+综合图表与表格结果，可以得到以下观察。
+
+首先，v1 证明了最小侵入式通信适配器能够在强 Backbone 上稳定接入，而不会立即破坏原有策略。其次，v2 在注意力锐化后整体表现优于 v1，说明通信模块确实受益于更强的路由选择性。再次，v3 通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，v4 将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，v5 则表明攻击协同与移动协同应区别对待，其中移动流若缺乏强稀疏路由，很容易退化为高熵平均。
+
+\section{v4 与 v5 的通信机制诊断}
+\esection{Communication Diagnostics for v4 and v5}
+
+为了进一步分析通信模块的行为，本文对 v4 与 v5 中的若干中间指标进行了诊断，包括注意力熵、无通信概率、门控均值与消息范数。图 \ref{fig:diag_attack} 给出了攻击侧通信诊断结果，图 \ref{fig:diag_move} 给出了移动侧通信诊断结果。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_attack.png}
+    \caption{v4 与 v5 攻击侧通信诊断结果}
+    \label{fig:diag_attack}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_move.png}
+    \caption{v5 移动侧通信诊断结果}
+    \label{fig:diag_move}
+\end{figure}
+
+从攻击侧诊断结果看，v4 的 Targeted Fusion 能够在较小结构代价下稳定影响攻击决策，这也是其具有较强可解释性的主要原因。相比之下，v5 在攻击流上依然可以保持一定稳定性，但其真正的难点出现在移动流。
+
+从移动侧诊断结果看，朴素双流结构中的移动消息更容易产生高熵平均现象，说明多个邻居的局部拓扑信息在未经约束的情况下容易被均值化。引入 top-1 稀疏路由后，移动流能够更明确地选择单个关键邻居，从而改善协同质量。进一步引入 softplus 门控后，方法的跨 seed 稳定性有所提升，但性能上界并未同步显著提高，说明当前瓶颈主要来自通信内容与稀疏路由方式，而非单纯的门控激活函数。
+
+\section{本章小结}
+\esection{Chapter Summary}
+
+本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO Backbone，并在此基础上系统比较了 v1--v5 五类轻量通信结构。
+
+实验结果表明：轻量、残差式、低带宽通信能够在不破坏 Backbone 的前提下发挥作用；语义明确的动作意图信息比抽象隐层特征更容易被策略有效利用；将通信限制在攻击子空间能够增强结构可解释性；对移动协同而言，硬稀疏路由比简单放大通信强度更关键。上述结果为后续进一步完善信息交互算法设计提供了实验依据。

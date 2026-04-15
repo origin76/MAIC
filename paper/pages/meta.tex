@@ -26,31 +26,31 @@
 %
 
 % 标题，中文
-\ctitle{这是一个标题}
+\ctitle{基于信息交互的多智能体强化学习算法研究}
 
 % 作者，中文
-\cauthor{张三}
+\cauthor{待填写}
 
 % 学科，中文，本科生不需要
 \csubject{}
 
 % 学院，专业，班级，中文，本科毕业论文需要
-\ccollege{能源与动力工程}
-\cmajor{能源与动力工程A}
-\cclass{能动A71}
+\ccollege{待填写}
+\cmajor{待填写}
+\cclass{待填写}
 
 % 设计所在单位，中文，本科毕业论文需要
 \corgnization{西安交通大学}
 
 % 学号
-\stunum{1234567890}
+\stunum{待填写}
 
 % 导师姓名，中文
-\csupervisor{李四}
+\csupervisor{待填写}
 
 % 关键词，中文。用全角分号「；」分割
 % 研究生的应首先从《汉语主题词表》中摘选
-\ckeywords{}
+\ckeywords{多智能体强化学习；信息交互；集中式训练分布式执行；MAPPO；SMAC}
 
 % 提交日期
 \cproddate{{\color{black}\the\year} 年\ {\color{black}\twodigits{\the\month}} 月}
@@ -60,24 +60,24 @@
 \ctype{}
 
 % 论文标题，英文
-\etitle{An Awesome Paper Title}
+\etitle{Research on Multi-Agent Reinforcement Learning Algorithms with Information Exchange}
 
 % 作者姓名，英文
-\eauthor{Author Name}
+\eauthor{To Be Filled}
 
 % 学科，英文，本科生不需要
 \esubject{}
 
 % 导师姓名，英文
-\esupervisor{}
+\esupervisor{To Be Filled}
 
 % 关键词，英文。用半角分号和一个半角空格「; 」分割
-\ekeywords{Wikipedia; Free encyclopedia; Winner; Good morning}
+\ekeywords{multi-agent reinforcement learning; information exchange; CTDE; MAPPO; SMAC}
 
 % 学科门类，英文
 % 从Philosophy（哲学）、Economics（经济学）、Law（法学）、Education（教育学）、Arts（文学）、
 %   Science（理学）、Engineering Science（工学）、Medicine（医学）、Management Science（管理学）中选择 
-\ecate{}
+\ecate{Engineering Science}
 
 % 提交日期，英文，本科生不需要
 % 应当和 cproddate 保持一致
@@ -91,8 +91,22 @@
 
 % 摘要，中文。段间空行
 \cabstract{
+多智能体强化学习在协作控制、群体决策与复杂博弈等场景中具有重要应用价值。对于部分可观测协作任务而言，单个智能体仅依赖局部观测往往难以形成稳定高效的整体行为，因此如何在集中式训练、分布式执行范式下设计有效的信息交互机制，成为当前多智能体强化学习研究中的关键问题。
+
+本文围绕基于信息交互的多智能体强化学习算法展开研究，首先对强化学习、多智能体强化学习以及典型通信机制进行了系统梳理，分析了现有方法在通信效率、消息语义、路由选择与融合策略等方面的不足。在算法设计上，本文以 MAPPO 为基础构建强 Backbone，并围绕 ``低带宽、低增益、残差注入、子空间融合'' 的设计原则，逐步实现并比较了多种轻量通信结构，包括最小侵入式通信适配器、动作意图共享、面向攻击子空间的 Targeted Fusion 以及攻击流/移动流双流通信结构。
+
+实验部分主要在原型环境 \texttt{join1} 与 SMAC 基准任务 \texttt{5m\_vs\_6m} 上开展。结果表明：受约束的稀疏通信在简单协作环境中能够带来显著收益，而缺乏结构约束的通信机制则可能直接导致训练坍塌；在构建可靠 vanilla MAPPO 基线后，轻量残差式通信模块能够在不破坏 Backbone 的前提下发挥作用；具有明确物理语义的动作意图信息相较于抽象隐层特征更容易被策略有效利用；将通信限制在攻击动作子空间能够显著增强结构可解释性；对移动协同而言，硬稀疏路由比简单放大通信强度更为关键。
+
+本文的研究表明，在协作多智能体任务中，信息交互机制的核心不在于盲目增加通信容量，而在于围绕任务结构设计受约束、可解释、与决策子空间对齐的轻量通信方案。相关实验结论可为后续进一步开展高效多智能体信息交互算法研究提供参考。
 }
 
 % 摘要，英文。段间空行
 \eabstract{
+Multi-agent reinforcement learning has shown strong potential in cooperative control, distributed decision making and complex games. In partially observable cooperative tasks, however, each agent only has access to limited local observations, which makes stable coordination difficult. Therefore, how to design effective information exchange mechanisms under the centralized training and decentralized execution paradigm has become a key problem in this field.
+
+This thesis studies multi-agent reinforcement learning algorithms with information exchange. We first review reinforcement learning, multi-agent reinforcement learning and representative communication mechanisms, and then analyze the limitations of existing methods in communication efficiency, message semantics, routing strategy and information fusion. On top of a MAPPO backbone, we further design a series of lightweight communication modules following the principles of low bandwidth, low gain, residual injection and subspace-aware fusion. The explored variants include a minimally invasive communication adapter, action-intention sharing, targeted fusion on the attack subspace, and a dual-stream communication structure for attack and movement coordination.
+
+Experiments are mainly conducted on the prototype environment \texttt{join1} and the SMAC benchmark task \texttt{5m\_vs\_6m}. The results show that constrained sparse communication can bring clear gains in simple cooperative scenarios, while poorly structured communication may lead to complete training collapse. After a reliable vanilla MAPPO backbone is established, lightweight residual communication can be introduced without destroying the base policy. Messages with explicit physical semantics, such as action intentions, are easier for the policy to exploit than abstract hidden features. Moreover, restricting communication to the attack action subspace improves interpretability, while movement coordination requires stronger sparse routing constraints than merely increasing communication intensity.
+
+Overall, this work suggests that the effectiveness of information exchange in cooperative multi-agent reinforcement learning depends less on blindly enlarging communication capacity and more on designing constrained, interpretable and decision-aligned communication schemes. The findings can serve as a useful reference for future research on efficient communication in multi-agent reinforcement learning.
 }

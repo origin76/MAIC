@@ -26,15 +26,61 @@
 %
 
 \chapter{绪论}
-\echapter{Preface}
+\echapter{Introduction}
 
-    \section{第一个二级标题}
-    \esection{The first section in the Preface}
+\section{研究背景与意义}
+\esection{Research Background and Motivation}
 
-        \subsection{三级标题}
-        \esubsection{Subsection in the Preface}
+强化学习通过智能体与环境的交互，实现以累积回报最大化为目标的策略学习，已在游戏决策、机器人控制和资源调度等领域取得显著进展。随着实际应用场景逐步从单智能体转向多主体协同，传统强化学习方法在信息不完整、决策耦合和信用分配等方面面临新的挑战，多智能体强化学习（Multi-Agent Reinforcement Learning, MARL）由此成为近年来的重要研究方向。
 
-            \subsubsection{四级标题}
-    \section{第二个二级标题}
-    \esection{Another section in the Preface}
+在协作型多智能体任务中，多个智能体需要基于有限局部观测完成整体目标。此类问题通常具有如下特点：其一，环境是部分可观测的，单个智能体无法仅凭自身信息做出全局最优决策；其二，多个智能体的动作相互影响，策略更新具有强耦合性；其三，任务绩效往往依赖群体协同而非单体最优，因此需要在局部自主性与整体协同性之间取得平衡。为缓解这些困难，集中式训练、分布式执行（CTDE）范式逐渐成为 MARL 的主流框架\cite{lowe2017maddpg,foerster2018coma,rashid2018qmix,yu2021mappo}。
 
+在 CTDE 范式下，训练阶段可以利用全局状态或更多集中信息辅助价值估计，而执行阶段仍要求各智能体依据局部信息独立决策。这一范式虽然增强了训练过程中的信息利用能力，但对于复杂协作任务而言，单纯依赖 centralized critic 仍难以完全弥补执行期的信息缺失。因此，如何在保持去中心化执行的前提下，让智能体学习有效的信息交互机制，成为多智能体强化学习中的核心问题之一\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional}。
+
+本文关注的正是这一问题：在协作场景下，智能体应当传递什么信息、与谁通信，以及如何将接收到的信息融入局部决策。对该问题的研究不仅有助于提升算法性能，也有助于从机制层面理解多智能体协作行为的形成方式。
+
+\section{国内外研究现状}
+\esection{Related Research Status}
+
+\subsection{多智能体强化学习主流技术路线}
+\esubsection{Main Streams of Multi-Agent Reinforcement Learning}
+
+现有多智能体强化学习方法大致可以分为两类。第一类是值分解方法，其代表工作包括 VDN、QMIX 等。此类方法通过将全局价值函数分解为多个局部价值函数，较好地解决了协作任务中的联合动作评价问题，其中 QMIX 通过单调混合网络显著提升了值分解方法在协作场景中的适用性\cite{rashid2018qmix}。然而，值分解方法通常更适用于离散动作且结构化较强的协作问题，在复杂策略表达和连续优化方面存在一定限制。
+
+第二类是基于 actor-critic 的方法，如 MADDPG、COMA 和 MAPPO 等\cite{lowe2017maddpg,foerster2018coma,yu2021mappo}。这类方法通过显式建模策略与价值函数，通常具有更强的策略表达能力和更灵活的训练方式。尤其是 MAPPO，在 cooperative games 中展现出较好的鲁棒性和实用性，因此成为本文进一步研究信息交互机制时所采用的主干基线。
+
+\subsection{基于信息交互的多智能体协作方法}
+\esubsection{Communication-Based Cooperation Methods}
+
+针对执行期信息不足的问题，研究者提出了多种显式通信方法。例如，CommNet 通过连续消息向量在多个智能体之间传播共享信息\cite{sukhbaatar2016commnet}；DIAL 进一步探讨了可微通信信道在协作任务中的作用\cite{foerster2016dial}；TarMAC 与注意力通信方法则强调通信对象选择的重要性，尝试通过目标化路由提升消息有效性\cite{das2019tarmac,jiang2018attentional}。
+
+尽管上述方法在一定程度上证明了通信机制的可行性，但它们也暴露出一些共性问题。首先，通信内容往往缺乏明确语义，导致消息容易演化为难以解释的隐式特征。其次，注意力或路由若缺乏约束，容易出现高熵平均，从而使消息退化为噪声。再次，通信分支若直接强耦合进入策略主干，可能淹没原本有效的局部观测特征，反而削弱微操行为的稳定性。
+
+\subsection{现有工作的不足与本文切入点}
+\esubsection{Limitations of Existing Work and Our Focus}
+
+综合来看，当前信息交互方法仍主要存在三方面不足。
+
+第一，信息交互效率不足。许多方法默认高频、全连接或高自由度消息传播，但在实际协作中，真正有用的信息通常是稀疏的、任务相关的。第二，消息编码缺乏明确物理语义，导致通信分支虽然参与训练，却难以被策略稳定利用。第三，融合策略往往过于粗放，容易出现通信特征覆盖局部策略特征的现象。
+
+基于上述观察，本文不再从“大规模增强通信容量”的方向入手，而是选择以强 MAPPO Backbone 为基础，围绕轻量、受约束、面向协作子空间的通信机制开展研究。这也是本文与仅关注通信表达能力提升的工作之间的主要区别。
+
+\section{本文研究内容与主要工作}
+\esection{Research Content and Main Contributions}
+
+围绕基于信息交互的多智能体强化学习算法，本文完成了以下几个方面的工作。
+
+首先，系统梳理了强化学习、多智能体强化学习以及典型通信机制的研究脉络，明确了 CTDE 框架下信息交互问题的关键挑战。
+
+其次，在实验层面，本文首先回到 vanilla MAPPO 主线，逐步完成 centralized critic、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，构建出后续通信研究所需的可靠 Backbone。
+
+再次，本文围绕低带宽、低增益、零初始化和残差融合的总体原则，设计并实现了多种轻量通信结构，包括最小侵入式通信适配器、动作意图共享、面向攻击子空间的 Targeted Fusion 以及攻击/移动双流通信结构，并在原型环境与标准基准环境中进行了系统比较。
+
+最后，本文通过消融和诊断实验，分析了通信内容、路由稀疏性和融合位置对性能的影响，归纳出动作意图更适合作为高价值消息载体、移动协同需要更强稀疏约束等阶段性结论。
+
+\section{论文结构安排}
+\esection{Organization of the Thesis}
+
+本文共分为五章，各章内容安排如下。
+
+第一章为绪论，介绍研究背景、国内外研究现状、本文研究内容与结构安排。第二章介绍多智能体强化学习与信息交互的相关理论基础，包括 CTDE、MAPPO 与典型通信方法。第三章给出本文基于 MAPPO 的轻量信息交互算法设计思路与主要结构。第四章对实验设置、基线构建以及不同通信结构的实验结果进行系统分析。第五章总结全文工作，并给出后续可继续推进的研究方向。

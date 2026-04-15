@@ -25,18 +25,20 @@
 % The Current Maintainer of this work is Aetf.
 %
 
-\iffalse
-\xjtuappendixchapter{附录}
-\xjtuappendixechapter{Appendices}
-% 超过一个 section 时用 Appendices, 否则用 Appendix
+\xjtuappendixchapter{补充实验材料}
+\xjtuappendixechapter{Supplementary Experimental Materials}
 
-    \xjtuappendixsection{二级标题}
+\xjtuappendixsection{实验结果文件说明}
 
-        \xjtuappendixsubsection{三级标题}
+本文实验中使用的主要结果文件包括：
+\begin{enumerate}
+    \item \texttt{results/sacred} 下的训练日志；
+    \item \texttt{results/sc2} 与 \texttt{results/join1} 下导出的 TensorBoard 标量 JSON；
+    \item \texttt{figures/current\_stage\_report\_2026\_04\_15} 目录下的汇总图表。
+\end{enumerate}
 
-            \xjtuappendixsubsubsection{四级标题}
+正文中的主要图像由脚本 \texttt{scripts/plot\_current\_stage\_report.py} 自动生成。
 
-    \xjtuappendixchapter{还是附录}
+\xjtuappendixsection{当前版本的未完成部分}
 
-        \xjtuappendixsection{测试}
-\fi
+受时间与篇幅限制，当前论文草稿中尚未完全补齐的内容主要包括：完整超参数表、硬件配置说明、更多种子实验的系统统计、以及最终定稿所需的正式致谢和个人元信息。这些内容不影响当前阶段对算法结构与实验结论的整理，但仍需在最终提交前补全。

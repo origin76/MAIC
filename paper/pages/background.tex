@@ -1,0 +1,40 @@
+\chapter{相关理论与研究现状}
+\echapter{Background and Related Work}
+
+\section{多智能体强化学习问题建模}
+\esection{Problem Formulation of Multi-Agent Reinforcement Learning}
+
+协作型多智能体问题通常可建模为分布式部分可观测马尔可夫决策过程（Dec-POMDP）。设系统中共有 $N$ 个智能体，状态空间为 $\mathcal{S}$，智能体 $i$ 的局部观测空间与动作空间分别记为 $\mathcal{O}_i$ 和 $\mathcal{A}_i$，联合动作记为 $\mathbf{a}=(a_1,\ldots,a_N)$，全局奖励函数记为 $r(s,\mathbf{a})$。智能体的目标是在长期交互过程中学习联合策略 $\pi(\mathbf{a}|\mathbf{o})$，使折扣累计回报最大。
+
+与单智能体强化学习相比，Dec-POMDP 中的核心难点在于：一方面，单个智能体的观测不足以恢复全局状态；另一方面，其他智能体策略的同步变化会导致环境对单个智能体而言呈现非平稳性。这些特点使得信用分配、策略优化与信息利用均变得更加困难。
+
+\section{集中式训练与分布式执行范式}
+\esection{Centralized Training and Decentralized Execution}
+
+为平衡训练效率与执行可行性，CTDE 已成为协作型 MARL 的主流框架。其基本思想是：在训练阶段允许使用额外的集中信息，例如全局状态、联合动作或其他智能体的中间表示；在执行阶段则要求每个智能体仅依据自身局部观测与历史隐藏状态进行动作选择。
+
+在该范式下，策略网络通常采用共享参数结构，以提升样本利用效率和泛化能力；价值网络则采用 centralized critic，对联合行为进行更稳定的回报估计。本文选择的 MAPPO 就属于该范式下的典型方法，其策略优化目标可表示为
+\begin{equation}
+L^{\text{clip}}(\theta)=
+\mathbb{E}_t \left[
+\min \left(
+r_t(\theta)\hat{A}_t,
+\operatorname{clip}\left(r_t(\theta),1-\epsilon,1+\epsilon\right)\hat{A}_t
+\right)
+\right],
+\end{equation}
+其中 $r_t(\theta)$ 表示新旧策略概率比，$\hat{A}_t$ 表示优势函数估计，$\epsilon$ 为截断系数。PPO 通过对策略更新幅度进行显式约束，提高了 on-policy 训练的稳定性\cite{schulman2017ppo}。
+
+\section{MAPPO 作为本文 Backbone 的原因}
+\esection{Why MAPPO is Chosen as the Backbone}
+
+MAPPO 之所以适合作为本文的主干方法，主要有以下原因。首先，MAPPO 保留了 PPO 简洁稳定的优化形式，同时通过共享 Actor 与 centralized critic 适应多智能体协作场景\cite{yu2021mappo}。其次，MAPPO 对网络结构和输入形式的兼容性较好，便于在不破坏主干学习过程的前提下插入轻量通信分支。最后，从实验组织角度看，MAPPO 的表现足够强，因此更适合作为“先构建强基线，再叠加通信设计”的研究路线。
+
+\section{典型信息交互机制及其局限性}
+\esection{Representative Communication Mechanisms and Their Limitations}
+
+显式通信机制的核心目标是弥补执行阶段局部观测的不足。早期工作如 CommNet 与 DIAL 主要关注连续消息传播和可微通信信道\cite{sukhbaatar2016commnet,foerster2016dial}；后续工作则进一步引入注意力与目标化通信，以提升消息选择性\cite{das2019tarmac,jiang2018attentional}。
+
+然而，从本文当前实验观察来看，通信机制并不是“越强越好”。若消息语义不明确、路由分布过于平均，或者融合位置过于靠前，通信分支可能不但无法带来增益，反而会淹没本地观测特征。特别是在微操类任务中，智能体本地策略已经包含大量即时动作偏好，若通信信息无法以受控方式进入决策过程，就很容易转化为高熵噪声。
+
+因此，本文后续算法设计不再以“扩大通信表达能力”为主要目标，而是强调以下原则：其一，通信内容应尽可能具备明确物理语义；其二，路由与带宽应受到约束；其三，通信更适合作为局部决策的残差修正，而非替代整个策略主干。
