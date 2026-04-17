@@ -1,80 +1,329 @@
 \chapter{基于 MAPPO 的轻量信息交互算法设计}
 \echapter{Lightweight Communication Design on Top of MAPPO}
 
-\section{总体设计思路}
-\esection{Overall Design Philosophy}
+\section{问题定义与设计目标}
+\esection{Problem Definition and Design Objectives}
 
-本文的算法设计遵循一个核心原则：在不破坏强 MAPPO Backbone 的前提下，引入尽可能轻量、可解释且可控的信息交互机制。与直接将通信模块并入主干隐藏状态不同，本文更关注以下三个问题：
+本文关注的是协作型多智能体部分可观测决策问题。设系统中共有 $N$ 个智能体，在时刻 $t$ 时，智能体 $i$ 的局部观测、动作与隐藏状态分别记为 $o_i^t$、$a_i^t$ 和 $h_i^t$，联合动作为 $\mathbf{a}^t=(a_1^t,\dots,a_N^t)$，环境返回共享奖励 $r_t$。在 CTDE 范式下，训练阶段允许 Critic 使用更完整的全局信息，执行阶段则要求每个智能体仅依赖局部观测和历史记忆进行决策。
 
+本文算法设计围绕如下三个目标展开。
 \begin{enumerate}
-    \item 通信消息是否具有明确语义，而不是难以解释的抽象隐层特征；
-    \item 通信路由是否受到稀疏化或结构约束，避免高熵平均；
-    \item 通信信息是否以残差方式作用于局部决策子空间，而不是覆盖原有策略特征。
+    \item 构建一个足够稳定的 MAPPO Backbone，使策略网络能够在无通信条件下形成可信的局部微操能力；
+    \item 在不破坏 Backbone 的前提下，引入轻量、低风险、可解释的通信分支；
+    \item 通过版本化设计逐步分析“传什么”“听谁的”和“如何融合”这三个核心问题。
 \end{enumerate}
 
-基于这一思路，本文将 vanilla MAPPO 作为固定 Backbone，然后逐步引入不同版本的轻量通信结构进行对比。
+基于上述目标，本文不采用“大规模重构 Actor 主干”的方式引入通信，而是将通信建模为附着在已有策略网络之上的残差修正模块。
 
 \section{vanilla MAPPO Backbone}
 \esection{Vanilla MAPPO Backbone}
 
-在本文的实现中，Actor 采用共享参数的循环策略网络。对任意智能体 $i$，在时刻 $t$ 的局部观测记为 $o_i^t$，其隐藏状态更新过程可写为
+\subsection{局部策略网络}
+\esubsection{Local Policy Network}
+
+本文使用共享参数的循环策略网络作为 Actor。对任意智能体 $i$，在时刻 $t$ 的局部表示首先由编码器和循环单元提取：
 \begin{equation}
-h_i^t = \operatorname{GRU}(o_i^t, h_i^{t-1}),
+e_i^t = f_{\text{enc}}(o_i^t), \qquad
+h_i^t = \operatorname{GRU}(e_i^t, h_i^{t-1}).
 \end{equation}
-随后由策略头输出局部动作 logits
+随后通过策略头输出局部动作 logits：
 \begin{equation}
-\ell_i^{\text{local}} = f_{\pi}(h_i^t).
+\ell_i^{\text{local}} = f_{\pi}(h_i^t),
 \end{equation}
-
-Critic 则使用集中式输入进行价值估计，用以缓解部分可观测带来的训练不稳定问题。为了使 Backbone 足够可靠，本文在实现中额外引入了 active masks、proper time-limit、学习率衰减与 KL early stop 等稳定化细节，从而将研究重点从“主干是否能学到”转移到“通信是否真正带来额外价值”上。
-
-\section{轻量通信适配器}
-\esection{Lightweight Communication Adapter}
-
-在 Backbone 已经能够产生有效局部策略的前提下，本文不再将通信视为一个替代策略主干的大模块，而将其设计为对局部决策的一个小规模修正分支。设通信分支为智能体 $i$ 聚合得到的消息为 $m_i^t$，则最基本的残差融合形式可写为
+并据此定义分布式执行阶段的局部策略
 \begin{equation}
-\tilde{\ell}_i =
-\ell_i^{\text{local}} + \lambda \, g_i \, \Delta_i,
+\pi_{\theta}(a_i^t|o_i^t,h_i^{t-1})=
+\operatorname{Softmax}\!\left(\ell_i^{\text{local}}\right).
 \end{equation}
-其中 $\lambda$ 表示通信增益系数，$g_i \in [0,1]$ 表示门控权重，$\Delta_i$ 为通信分支预测得到的 logits 修正量。
 
-该形式有两个优点。首先，它不会直接破坏原有局部策略结构，因为当门控较小或修正量较小时，策略仍以本地观测驱动为主。其次，该形式允许针对不同动作子空间做差异化处理，例如仅对攻击动作 logits 进行修正，而保留移动动作完全由本地策略控制。
+在无通信条件下，该策略网络已经能够基于局部观测学习出基础攻击、追击、后撤等微操行为，因此后续通信模块不应替代该能力，而应以小幅修正的形式提供额外协同信息。
 
-\section{版本演化：从 v1 到 v5}
-\esection{Version Evolution from v1 to v5}
+\subsection{集中式价值函数}
+\esubsection{Centralized Value Function}
 
-\subsection{v1：最小侵入式通信接入}
-\esubsection{v1: Minimally Invasive Communication}
-
-v1 的目标是验证通信适配器能否在几乎不改动 learner、critic 和 PPO 主流程的前提下挂接到强 Backbone 上。此时消息带宽、增益和初始化均较为克制，重点在于保证通信分支“能接入而不炸掉”。
-
-\subsection{v2：注意力锐化与更积极的适配训练}
-\esubsection{v2: Sharper Attention and Faster Adapter Learning}
-
-在 v1 基础上，v2 主要解决“谁都听一点、最后等于没听”的问题。其核心是增加通信路由的选择性，使消息不再长期处于高熵平均状态。
-
-\subsection{v3：动作意图共享}
-\esubsection{v3: Action-Intention Sharing}
-
-v3 的关键变化在于消息载体的改变。与传递抽象隐层特征不同，v3 更倾向传递带有明确物理含义的动作意图，例如攻击偏好或目标选择倾向。这使通信消息更容易被本地策略理解并利用。
-
-\subsection{v4：面向攻击子空间的 Targeted Fusion}
-\esubsection{v4: Targeted Fusion on the Attack Subspace}
-
-v4 将通信进一步限制在攻击子空间，即仅对攻击 logits 添加小幅偏置，而不改动移动子空间。其融合形式可以写为
+Critic 使用集中式输入进行价值估计。记训练阶段可用的集中信息为 $x^t$，则 centralized critic 定义为
 \begin{equation}
-\ell_i^{\text{attack}} =
-\ell_i^{\text{local,attack}} +
-\lambda_{\text{att}} g_i^{\text{att}} \Delta_i^{\text{att}}.
+V_{\phi}(x^t) = f_{V}(x^t).
 \end{equation}
-这一设计显著增强了结构可解释性，因为通信模块的作用被明确限定为“帮助集火决策”，而不是全局替代本地策略。
+在实际实现中，$x^t$ 可由全局状态、联合观测或经过拼接的集中式特征构成。该设计的目的在于缓解部分可观测与多智能体策略耦合带来的估值困难。
 
-\subsection{v5：攻击流与移动流双流通信}
-\esubsection{v5: Dual-Stream Communication for Attack and Movement}
+基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数：
+\begin{equation}
+\delta_t = r_t + \gamma V_{\phi}(x^{t+1}) - V_{\phi}(x^t),
+\end{equation}
+\begin{equation}
+\hat{A}_t = \sum_{l=0}^{T-t-1} (\gamma \lambda)^l \delta_{t+l},
+\end{equation}
+其中 $\gamma$ 为折扣因子，$\lambda$ 为 GAE 系数。
 
-v5 进一步提出：攻击协同与移动协同应分别建模。为此，本文将通信结构拆分为攻击流与移动流。攻击流主要服务于集火决策，移动流主要服务于局部拓扑协调与走位修正。实验中进一步发现，移动流若缺乏强稀疏路由约束，极易退化为高熵平均，因此在 v5 中引入了基于 top-1 路由的硬稀疏设计。
+\subsection{MAPPO 优化目标}
+\esubsection{MAPPO Objective}
+
+本文采用 PPO 风格的截断策略目标优化共享 Actor。记新旧策略的概率比为
+\begin{equation}
+r_t(\theta) =
+\frac{\pi_{\theta}(a_t|o_t,h_{t-1})}
+{\pi_{\theta_{\text{old}}}(a_t|o_t,h_{t-1})},
+\end{equation}
+则策略损失为
+\begin{equation}
+L_{\text{policy}}(\theta)=
+\mathbb{E}_t \left[
+\min\left(
+r_t(\theta)\hat{A}_t,
+\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat{A}_t
+\right)
+\right].
+\end{equation}
+
+考虑到价值函数过快更新也会导致训练不稳定，本文进一步采用 PPO-style value clipping：
+\begin{equation}
+V_t^{\text{clip}} =
+V_{\phi_{\text{old}}}(x_t) +
+\operatorname{clip}
+\left(
+V_{\phi}(x_t)-V_{\phi_{\text{old}}}(x_t),
+-\epsilon_v,\epsilon_v
+\right),
+\end{equation}
+\begin{equation}
+L_{\text{value}}(\phi)=
+\mathbb{E}_t \left[
+\max\left(
+(V_{\phi}(x_t)-R_t)^2,
+(V_t^{\text{clip}}-R_t)^2
+\right)
+\right],
+\end{equation}
+其中 $R_t$ 表示回报目标。最终优化目标写为
+\begin{equation}
+L =
+L_{\text{policy}}
+ - c_e L_{\text{entropy}}
+ + c_v L_{\text{value}},
+\end{equation}
+其中 $L_{\text{entropy}}$ 为策略熵正则项，$c_e$ 与 $c_v$ 分别为熵系数和价值损失系数。
+
+在实现层面，本文还引入了 active masks、proper time-limit、线性学习率衰减以及基于近似 KL 的 early stop 机制，从而显著增强了 Backbone 的训练稳定性。
+
+\section{统一通信框架}
+\esection{Unified Communication Formulation}
+
+\subsection{消息生成与路由计算}
+\esubsection{Message Construction and Routing}
+
+本文后续所有通信版本都建立在同一抽象框架之上。对智能体 $i$ 而言，首先从本地隐藏状态或其派生特征中构造待发送表示 $z_i^t$：
+\begin{equation}
+z_i^t = f_{\text{msg}}(h_i^t).
+\end{equation}
+随后分别构造 query、key 和 value：
+\begin{equation}
+q_i^t = W_q h_i^t,\qquad
+k_j^t = W_k z_j^t,\qquad
+v_j^t = W_v z_j^t.
+\end{equation}
+若智能体 $j$ 位于 $i$ 的候选通信集合 $\mathcal{N}_i^t$ 中，则其注意力权重定义为
+\begin{equation}
+\alpha_{ij}^t
+=
+\frac{\exp\left((q_i^t)^\top k_j^t / \sqrt{d}\right)}
+{\sum_{u \in \mathcal{N}_i^t}
+\exp\left((q_i^t)^\top k_u^t / \sqrt{d}\right)},
+\qquad j \in \mathcal{N}_i^t.
+\end{equation}
+进一步得到聚合消息
+\begin{equation}
+m_i^t=\sum_{j \in \mathcal{N}_i^t}\alpha_{ij}^t v_j^t.
+\end{equation}
+
+这一标准化表达有助于统一理解不同版本之间的差异：有些版本主要修改 $z_i^t$ 的物理语义，有些版本主要修改 $\alpha_{ij}^t$ 的稀疏性，有些版本则主要修改 $m_i^t$ 进入策略的方式。
+
+\subsection{残差式融合}
+\esubsection{Residual Fusion}
+
+为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路。设 $\operatorname{LN}(\cdot)$ 表示归一化层，通信修正量与门控分别定义为
+\begin{equation}
+\Delta_i^t = f_{\Delta}\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right),
+\end{equation}
+\begin{equation}
+g_i^t = \sigma\!\left(f_g\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right)+b_g\right),
+\end{equation}
+其中 $[\cdot,\cdot]$ 表示向量拼接，$\sigma(\cdot)$ 为 Sigmoid 函数，$b_g$ 为门控偏置。最终动作 logits 为
+\begin{equation}
+\tilde{\ell}_i^t
+=
+\ell_i^{\text{local}} + \lambda g_i^t \Delta_i^t,
+\label{eq:general_residual_fusion}
+\end{equation}
+其中 $\lambda$ 为通信增益系数。
+
+式 \eqref{eq:general_residual_fusion} 是全文通信设计的核心。它保证了当通信尚未学好时，策略仍可退化为纯局部 MAPPO；而当通信确实携带高价值协同信息时，门控和残差修正会逐步将其注入决策过程。
+
+\subsection{设计原则}
+\esubsection{Design Principles}
+
+基于上述统一框架，本文将通信设计归纳为以下四项原则。
+\begin{enumerate}
+    \item \textbf{低带宽}：消息维度应尽可能小，以抑制无约束高容量通信带来的数值失衡与过拟合。
+    \item \textbf{低增益}：通信支路对策略的影响应从弱开始，通过零初始化和小增益逐步学习。
+    \item \textbf{可解释}：优先传递具有明确物理意义的消息，例如动作意图或攻击偏置。
+    \item \textbf{子空间融合}：通信最好只作用于真正需要协同的动作子空间，而不是替代整个局部策略。
+\end{enumerate}
+
+\section{最小侵入通信}
+\esection{Minimally Invasive Communication}
+
+最小侵入通信的目标是回答最基础的问题：在几乎不改动 learner、critic 和 PPO 主流程的前提下，通信适配器能否挂接到强 Backbone 上并稳定训练。由于此时本文尚未确认通信分支在当前 Backbone 上的数值稳定性，因此该算法的设计选择是极度克制的，包括单头、低带宽、零初始化投影以及较小残差增益。
+
+在这一版本中，发送消息可以近似写为
+\begin{equation}
+z_i^t = W_m h_i^t,
+\end{equation}
+随后按照统一通信框架计算注意力权重与聚合消息，并通过式 \eqref{eq:general_residual_fusion} 注入局部策略。需要强调的是，该适配器的重点并不在于提升通信表达能力，而在于控制通信支路的风险暴露，使其能够以“附着模块”的形式被 Backbone 吸收。
+
+因此，该算法的理论意义在于建立一个安全起点：如果连最小侵入通信都无法稳定工作，则后续更复杂的语义设计和路由设计都缺乏讨论基础。
+
+\section{锐化路由通信}
+\esection{Sharpened-Routing Communication}
+
+最小侵入通信的主要局限在于：即使通信分支不会立刻破坏主干，路由也很容易停留在“谁都听一点”的高熵平均状态。这种情况下，聚合消息更像多个邻居特征的模糊平均，而不是某个关键协作者的明确信号。锐化路由通信因此将改进重点放在路由选择性上。
+
+从统一框架角度看，锐化路由通信的变化主要体现在对 $\alpha_{ij}^t$ 的约束增强，即通过更尖锐的注意力分布让少数高价值邻居获得更大权重。其本质是在不显著改变消息载体的前提下优化“听谁的”。也就是说，该算法仍然主要传递 hidden feature，但希望让消息来源更有选择性。
+
+与最小侵入通信相比，锐化路由通信的核心改进不是“传什么”，而是“不要平均地听所有人”。这为后续进一步讨论消息语义提供了过渡。
+
+\section{动作意图共享}
+\esection{Action-Intention Sharing}
+
+在锐化路由通信之后，本文开始转向更本质的问题：如果消息本身缺乏明确物理意义，那么即使路由变尖，策略也未必知道应当如何利用该消息。因此，动作意图共享的关键变化在于消息载体的改变。
+
+设局部动作 logits 拆分为移动和攻击两部分：
+\begin{equation}
+\ell_i^{\text{local}} =
+\left[
+\ell_i^{\text{move}},
+\ell_i^{\text{attack}}
+\right],
+\end{equation}
+则一种自然的动作意图表示为
+\begin{equation}
+z_i^t = \operatorname{Softmax}\!\left(\ell_i^{\text{attack}}\right).
+\end{equation}
+
+此时通信分支不再试图让下游网络从黑箱特征中“猜测”队友意图，而是直接传递“更想打谁”这一协同信号。对于微操任务中的集火行为而言，这类消息具有更明确的物理语义，因此更容易被策略有效利用。
+
+从方法演化角度看，动作意图共享相对于前两类方法的核心飞跃在于：通信模块开始从“传递抽象表征”转向“传递任务相关的语义消息”。这也是后续实验中该方法能在原始峰值表现上取得更强竞争力的重要原因。
+
+\section{攻击子空间融合}
+\esection{Attack-Subspace Fusion}
+
+虽然动作意图共享已经显著提升了消息语义，但其通信修正仍可能作用到较大范围的策略特征。为进一步增强可解释性，攻击子空间融合将融合位置限制到攻击子空间。换言之，该方法不再允许通信分支影响整个策略输出，而只允许其在“打谁”这一协作最关键的决策子空间内发挥作用。
+
+设本地 logits 拆分为
+\begin{equation}
+\ell_i^{\text{local}}=
+\left[
+\ell_i^{\text{move}},
+\ell_i^{\text{attack}}
+\right],
+\end{equation}
+则攻击子空间融合仅对攻击部分进行修正：
+\begin{equation}
+\Delta_i^{\text{att}}=
+f_{\Delta,\text{att}}
+\left(
+[h_i^t,\operatorname{LN}(m_i^{\text{att}})]
+\right),
+\end{equation}
+\begin{equation}
+g_i^{\text{att}}=
+\sigma
+\left(
+f_{g,\text{att}}
+\left(
+[h_i^t,\operatorname{LN}(m_i^{\text{att}})]
+\right)
++ b_{\text{att}}
+\right),
+\end{equation}
+\begin{equation}
+\tilde{\ell}_i^{\text{attack}}=
+\ell_i^{\text{attack}}+\lambda_{\text{att}}g_i^{\text{att}}\Delta_i^{\text{att}}.
+\end{equation}
+最终输出写为
+\begin{equation}
+\tilde{\ell}_i=
+\left[
+\ell_i^{\text{move}},
+\tilde{\ell}_i^{\text{attack}}
+\right].
+\end{equation}
+
+这一设计使通信模块的作用被明确限定为“帮助集火”，而移动等局部微操行为仍主要由本地策略主导。因此，攻击子空间融合的主要价值并不只是性能变化，更在于其方法可解释性显著增强。它将“通信如何影响策略”从黑箱级别压缩到了一个可以清晰描述的动作子空间内。
+
+\section{攻移双流通信}
+\esection{Attack-Move Dual-Stream Communication}
+
+在攻击子空间融合的基础上，本文进一步提出：攻击协同与移动协同不应由同一消息承载。对于微操任务而言，“打谁”和“怎么走”是两类性质不同的决策，前者更接近目标一致性问题，后者则更接近局部拓扑协调问题。因此，攻移双流通信将通信结构拆分为攻击流与移动流。
+
+攻击流与攻击子空间融合类似，主要用于集火偏置；移动流则写为
+\begin{equation}
+\Delta_i^{\text{mov}}=
+f_{\Delta,\text{mov}}
+\left(
+[h_i^t,\operatorname{LN}(m_i^{\text{mov}})]
+\right),
+\end{equation}
+\begin{equation}
+g_i^{\text{mov}}=
+\sigma
+\left(
+f_{g,\text{mov}}
+\left(
+[h_i^t,\operatorname{LN}(m_i^{\text{mov}})]
+\right)
++ b_{\text{mov}}
+\right),
+\end{equation}
+\begin{equation}
+\tilde{\ell}_i^{\text{move}}=
+\ell_i^{\text{move}}+\lambda_{\text{mov}}g_i^{\text{mov}}\Delta_i^{\text{mov}}.
+\end{equation}
+最终双流融合结果为
+\begin{equation}
+\tilde{\ell}_i=
+\left[
+\tilde{\ell}_i^{\text{move}},
+\tilde{\ell}_i^{\text{attack}}
+\right].
+\end{equation}
+
+然而，实验进一步表明，移动协同比攻击协同更容易退化为高熵平均，因此攻移双流通信在移动流中引入了 top-1 或 top-$k$ 风格的硬稀疏路由。若记硬稀疏算子为 $\mathcal{H}(\cdot)$，则有
+\begin{equation}
+\bar{\alpha}_{ij}^t = \mathcal{H}(\alpha_{ij}^t),
+\qquad
+m_i^{\text{mov}}=\sum_{j\in \mathcal{N}_i^t}\bar{\alpha}_{ij}^t v_j^t.
+\end{equation}
+
+因此，攻移双流通信的研究重点已经不再是“通信能否帮助攻击决策”，而是进一步追问“移动协调为什么更难，以及怎样的结构约束才足以让移动消息避免均值化退化”。这也是该方法在本文整体叙事中承担机制分析角色的原因。
+
+\section{算法流程总结}
+\esection{Algorithmic Summary}
+
+综合以上设计，本文方法的训练与执行流程可概括为如下步骤：
+\begin{enumerate}
+    \item 每个智能体根据局部观测更新隐藏状态，并输出本地动作 logits；
+    \item 若启用通信分支，则从隐藏状态或动作意图中构造待发送消息；
+    \item 通过注意力或硬稀疏路由从邻居中选择高价值消息并完成聚合；
+    \item 将通信消息经过门控和残差映射后，注入到对应动作子空间；
+    \item 使用 MAPPO 的策略损失、价值损失和熵正则联合优化 Actor 与 Critic。
+\end{enumerate}
+
+从方法论角度看，本文并不是单纯追求通信表达能力的最大化，而是强调：只有当消息语义、路由结构和融合位置共同与任务需求对齐时，通信才真正可能带来稳定有效的协同收益。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章给出了本文算法设计的总体思路，即以强 MAPPO Backbone 为基础，采用轻量、残差式、受约束的通信结构逐步增强协作能力。与直接扩大通信容量的思路不同，本文更强调消息语义、路由稀疏性以及融合位置的结构合理性。后续实验将围绕这些设计原则展开验证与分析。
+本章从问题定义出发，给出了本文基于 MAPPO 的轻量信息交互算法设计。首先，本文构建了带 centralized critic 的 vanilla MAPPO Backbone，并使用 PPO-style policy clipping、value clipping、GAE 与一系列稳定化技巧提升训练鲁棒性。随后，本文提出统一通信框架，将消息设计、路由计算和残差融合纳入同一数学表达中。最后，通过最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合以及攻移双流通信这五类递进式设计，系统展开了对消息语义、路由稀疏性和子空间融合策略的探索。
+
+这些设计共同构成了后续实验分析的理论基础，也为回答“何种信息交互机制真正有助于协作多智能体决策”提供了方法层面的支撑。

@@ -205,6 +205,34 @@ FAMILY_COLORS = {
 }
 
 
+FAMILY_DISPLAY_NAMES = {
+    "v1": "Minimal Communication",
+    "v2": "Sharpened-Routing Communication",
+    "v3": "Action-Intention Sharing",
+    "v4": "Attack-Subspace Fusion",
+    "v5": "Attack-Move Dual-Stream Communication",
+}
+
+
+CONFIG_DISPLAY_NAMES = {
+    "v1_detach": "Minimal Communication (Detach)",
+    "v1_end2end": "Minimal Communication (End-to-End)",
+    "v2_sharp": "Sharpened Routing Communication",
+    "v2_fastcomm": "Sharpened Routing + FastComm",
+    "v2_sharp_soft": "Soft Sharpened Routing",
+    "v3_detach": "Action Intention Sharing (Detach)",
+    "v3_end2end": "Action Intention Sharing (End-to-End)",
+    "v3_gatefloor": "Action Intention Sharing + Gate Floor",
+    "v3_gain": "Action Intention Sharing + Gain Boost",
+    "v3_fusionboost": "Action Intention Sharing + Fusion Boost",
+    "v4_base": "Attack-Subspace Fusion",
+    "v4_softuse": "Attack-Subspace Fusion (Soft Use)",
+    "v5_base": "Attack-Move Dual-Stream Communication",
+    "v5_top1move": "Dual-Stream + Top-1 Move Routing",
+    "v5_top1move_softplus": "Dual-Stream + Top-1 Move + Softplus",
+}
+
+
 plt.rcParams.update(
     {
         "figure.dpi": 150,
@@ -313,6 +341,14 @@ def write_csv(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) 
         writer.writerows(rows)
 
 
+def family_display_name(family: str) -> str:
+    return FAMILY_DISPLAY_NAMES.get(family, family)
+
+
+def config_display_name(label: str) -> str:
+    return CONFIG_DISPLAY_NAMES.get(label, label)
+
+
 def plot_join1(output_dir: Path) -> None:
     curves = []
     all_x = []
@@ -391,7 +427,9 @@ def collect_run_rows(groups: list[DirGroupSpec]) -> list[dict[str, object]]:
             rows.append(
                 {
                     "family": group.family,
+                    "family_display": family_display_name(group.family),
                     "config_label": group.label,
+                    "config_display": config_display_name(group.label),
                     "seed": seed,
                     "json_path": str(path.relative_to(ROOT)),
                     "peak": stats["peak"],
@@ -417,7 +455,9 @@ def aggregate_rows(run_rows: list[dict[str, object]]) -> list[dict[str, object]]
         aggregated.append(
             {
                 "family": family,
+                "family_display": family_display_name(family),
                 "config_label": config_label,
+                "config_display": config_display_name(config_label),
                 "num_runs": len(rows),
                 "peak_mean": float(np.mean(peaks)),
                 "peak_std": float(np.std(peaks)),
@@ -433,7 +473,7 @@ def aggregate_rows(run_rows: list[dict[str, object]]) -> list[dict[str, object]]
 
 
 def plot_v1_v5_variant_summary(output_dir: Path, agg_rows: list[dict[str, object]]) -> None:
-    labels = [str(row["config_label"]) for row in agg_rows]
+    labels = [str(row["config_display"]) for row in agg_rows]
     families = [str(row["family"]) for row in agg_rows]
     colors = [FAMILY_COLORS.get(family, "#7f7f7f") for family in families]
     y_pos = np.arange(len(labels))
@@ -452,8 +492,8 @@ def plot_v1_v5_variant_summary(output_dir: Path, agg_rows: list[dict[str, object
     axes[0].set_yticks(y_pos)
     axes[0].set_yticklabels(labels)
     axes[0].invert_yaxis()
-    fig.suptitle("v1-v5 Communication Variants Summary", y=1.02, fontsize=14, fontweight="bold")
-    save_figure(fig, output_dir / "v1_v5_variant_summary.png")
+    fig.suptitle("Summary of Five Lightweight Communication Algorithms", y=1.02, fontsize=14, fontweight="bold")
+    save_figure(fig, output_dir / "lightweight_comm_algorithm_summary.png")
 
 
 def plot_v1_v5_family_best(output_dir: Path, agg_rows: list[dict[str, object]]) -> None:
@@ -467,7 +507,7 @@ def plot_v1_v5_family_best(output_dir: Path, agg_rows: list[dict[str, object]]) 
             continue
         best_rows.append(max(rows, key=lambda row: float(row["last5_mean"])))
 
-    labels = [f"{row['family']} ({row['config_label']})" for row in best_rows]
+    labels = [f"{row['family_display']}\n({row['config_display']})" for row in best_rows]
     x = np.arange(len(labels))
     width = 0.24
     fig, ax = plt.subplots(figsize=(13, 5.8))
@@ -485,9 +525,9 @@ def plot_v1_v5_family_best(output_dir: Path, agg_rows: list[dict[str, object]]) 
     ax.set_xticklabels(labels, rotation=15, ha="right")
     ax.set_ylim(0.0, 0.82)
     ax.set_ylabel("test_battle_won_mean")
-    ax.set_title("Best Configuration Per Version Family")
+    ax.set_title("Best Configuration of Each Communication Algorithm")
     ax.legend(frameon=False)
-    save_figure(fig, output_dir / "v1_v5_family_best_summary.png")
+    save_figure(fig, output_dir / "lightweight_comm_family_best_summary.png")
 
 
 def build_version_map() -> dict[str, list[Path]]:
@@ -520,15 +560,15 @@ def plot_representative_curves(output_dir: Path, version_map: dict[str, list[Pat
             x_scaled,
             y,
             linewidth=2.5,
-            label=f"{label} (seed {seed})",
+            label=f"{config_display_name(label)} (seed {seed})",
             color=FAMILY_COLORS.get(family),
         )
         ax.scatter([x_scaled[-1]], [y[-1]], s=26)
-    ax.set_title("Representative Communication Runs from v1 to v5")
+    ax.set_title("Representative Runs of Five Lightweight Communication Algorithms")
     ax.set_ylabel("test_battle_won_mean")
     ax.set_ylim(0.0, 0.8)
     ax.legend(frameon=False, ncol=2)
-    save_figure(fig, output_dir / "v1_v5_representative_curves.png")
+    save_figure(fig, output_dir / "lightweight_comm_representative_curves.png")
 
 
 def plot_diagnostics(output_dir: Path, version_map: dict[str, list[Path]]) -> None:
@@ -589,19 +629,28 @@ def plot_diagnostics(output_dir: Path, version_map: dict[str, list[Path]]) -> No
                 x, y, std = curve
                 family = next(group.family for group in VERSION_GROUPS if group.label == label)
                 color = FAMILY_COLORS.get(family, "#7f7f7f")
+                display_label = config_display_name(label)
                 if label == "v5_top1move_softplus":
-                    ax.plot(scaled_x(ax, x), y, linewidth=2.4, color=color, label=f"{label} ({legend_suffix})")
+                    ax.plot(scaled_x(ax, x), y, linewidth=2.4, color=color, label=f"{display_label} ({legend_suffix})")
                     ax.fill_between(scaled_x(ax, x), y - std, y + std, color=color, alpha=0.18, linewidth=0.0)
                 else:
-                    ax.plot(scaled_x(ax, x), y, linewidth=2.0, color=color, label=f"{label} ({legend_suffix})")
+                    ax.plot(scaled_x(ax, x), y, linewidth=2.0, color=color, label=f"{display_label} ({legend_suffix})")
             ax.set_title(subtitle)
             ax.set_ylabel("value")
         axes[0].legend(frameon=False, fontsize=9)
         fig.suptitle(title, y=1.01, fontsize=14, fontweight="bold")
         save_figure(fig, output_dir / filename)
 
-    draw_grid(attack_keys, "Communication Diagnostics: v4/v5 Attack-side Signals", "communication_diagnostics_attack.png")
-    draw_grid(move_keys, "Communication Diagnostics: v5 Move-side Signals", "communication_diagnostics_move.png")
+    draw_grid(
+        attack_keys,
+        "Communication Diagnostics: Attack-Side Signals of Attack-Subspace Fusion and Dual-Stream Models",
+        "communication_diagnostics_attack.png",
+    )
+    draw_grid(
+        move_keys,
+        "Communication Diagnostics: Move-Side Signals of the Dual-Stream Model",
+        "communication_diagnostics_move.png",
+    )
 
 
 def main() -> None:
@@ -625,14 +674,38 @@ def main() -> None:
     agg_rows = aggregate_rows(run_rows)
 
     write_csv(
-        output_dir / "v1_v5_run_summary.csv",
+        output_dir / "lightweight_comm_run_summary.csv",
         run_rows,
-        ["family", "config_label", "seed", "json_path", "peak", "final", "last5", "num_points", "best_t_env"],
+        [
+            "family",
+            "family_display",
+            "config_label",
+            "config_display",
+            "seed",
+            "json_path",
+            "peak",
+            "final",
+            "last5",
+            "num_points",
+            "best_t_env",
+        ],
     )
     write_csv(
-        output_dir / "v1_v5_config_summary.csv",
+        output_dir / "lightweight_comm_config_summary.csv",
         agg_rows,
-        ["family", "config_label", "num_runs", "peak_mean", "peak_std", "final_mean", "final_std", "last5_mean", "last5_std"],
+        [
+            "family",
+            "family_display",
+            "config_label",
+            "config_display",
+            "num_runs",
+            "peak_mean",
+            "peak_std",
+            "final_mean",
+            "final_std",
+            "last5_mean",
+            "last5_std",
+        ],
     )
 
     plot_v1_v5_variant_summary(output_dir, agg_rows)

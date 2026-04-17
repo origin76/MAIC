@@ -47,80 +47,80 @@
 
 这一结论为后续通信实验提供了坚实基础。只有当 Backbone 本身具备足够强的协作能力时，通信模块的收益和缺陷才具有分析意义。
 
-\section{v1--v5 轻量通信结构对比}
-\esection{Comparison of v1--v5 Lightweight Communication Variants}
+\section{五类轻量通信算法对比}
+\esection{Comparison of Five Lightweight Communication Algorithms}
 
-在固定强 Backbone 后，本文依次实现并比较了五类轻量通信结构。图 \ref{fig:v1v5_summary} 展示了不同版本的峰值、最终点与末 5 点平均统计，图 \ref{fig:v1v5_curves} 则给出了若干代表性 run 的测试胜率曲线。
+在固定强 Backbone 后，本文依次实现并比较了五类轻量通信算法。图 \ref{fig:lightweight_comm_summary} 展示了不同算法及其代表配置的峰值、最终点与末 5 点平均统计，图 \ref{fig:lightweight_comm_curves} 则给出了若干代表性 run 的测试胜率曲线。
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.96\textwidth]{generated/v1_v5_variant_summary.png}
-    \caption{v1--v5 各通信配置的统计结果对比}
-    \label{fig:v1v5_summary}
+    \includegraphics[width=0.96\textwidth]{generated/lightweight_comm_algorithm_summary.png}
+    \caption{五类轻量通信算法各代表配置的统计结果对比}
+    \label{fig:lightweight_comm_summary}
 \end{figure}
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.92\textwidth]{generated/v1_v5_representative_curves.png}
-    \caption{v1--v5 代表性 run 的测试胜率曲线}
-    \label{fig:v1v5_curves}
+    \includegraphics[width=0.92\textwidth]{generated/lightweight_comm_representative_curves.png}
+    \caption{五类轻量通信算法代表性 run 的测试胜率曲线}
+    \label{fig:lightweight_comm_curves}
 \end{figure}
 
-为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。需要指出的是，v3、v4 与 v5 对应的是不同侧重点：v3 在原始峰值能力上最具优势，v4 在结构可解释性上最为清晰，v5 则更强调对移动协同机制的分析。
+为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。需要指出的是，动作意图共享、攻击子空间融合与攻移双流通信分别对应不同侧重点：前者在原始峰值能力上最具优势，中者在结构可解释性上最为清晰，后者则更强调对移动协同机制的分析。
 
 \begin{table}[htbp]
     \centering
     \caption{各阶段代表配置的关键结果对比}
     \label{tab:main_results}
-    \begin{tabular}{|c|c|c|c|c|}
+    \begin{tabular}{|p{4.0cm}|p{4.3cm}|c|c|c|}
         \hline
-        版本 & 代表配置 & peak & final & last5 \\
+        算法类别 & 代表实现 & peak & final & last5 \\
         \hline
-        Backbone & warm-start control & 0.854 & 0.625 & 0.642 \\
+        基线 Backbone & warm-start 微调对照组 & 0.854 & 0.625 & 0.642 \\
         \hline
-        v1 & v1\_end2end & 0.813 & 0.646 & 0.563 \\
+        最小侵入通信 & 端到端残差接入 & 0.813 & 0.646 & 0.563 \\
         \hline
-        v2 & v2\_sharp\_soft & 0.854 & 0.667 & 0.583 \\
+        锐化路由通信 & 软锐化路由 & 0.854 & 0.667 & 0.583 \\
         \hline
-        v3 & v3\_end2end & 0.938 & 0.563 & 0.600 \\
+        动作意图共享 & 端到端动作意图共享 & 0.938 & 0.563 & 0.600 \\
         \hline
-        v4 & v4\_base & 0.813 & 0.750 & 0.613 \\
+        攻击子空间融合 & 基础目标融合 & 0.813 & 0.750 & 0.613 \\
         \hline
-        v5 & v5\_top1move\_softplus & 0.771 & 0.688 & 0.588 \\
+        攻移双流通信 & Top-1 移动路由 + Softplus 门控 & 0.771 & 0.688 & 0.588 \\
         \hline
     \end{tabular}
 \end{table}
 
 综合图表与表格结果，可以得到以下观察。
 
-首先，v1 证明了最小侵入式通信适配器能够在强 Backbone 上稳定接入，而不会立即破坏原有策略。其次，v2 在注意力锐化后整体表现优于 v1，说明通信模块确实受益于更强的路由选择性。再次，v3 通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，v4 将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，v5 则表明攻击协同与移动协同应区别对待，其中移动流若缺乏强稀疏路由，很容易退化为高熵平均。
+首先，最小侵入通信证明了通信分支能够在强 Backbone 上稳定接入，而不会立即破坏原有策略。其次，锐化路由通信在注意力锐化后整体表现优于最小侵入通信，说明通信模块确实受益于更强的路由选择性。再次，动作意图共享通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，攻击子空间融合将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，攻移双流通信则表明攻击协同与移动协同应区别对待，其中移动流若缺乏强稀疏路由，很容易退化为高熵平均。
 
-\section{v4 与 v5 的通信机制诊断}
-\esection{Communication Diagnostics for v4 and v5}
+\section{攻击子空间融合与攻移双流通信的机制诊断}
+\esection{Diagnostics of Attack-Subspace Fusion and Attack-Move Dual-Stream Communication}
 
-为了进一步分析通信模块的行为，本文对 v4 与 v5 中的若干中间指标进行了诊断，包括注意力熵、无通信概率、门控均值与消息范数。图 \ref{fig:diag_attack} 给出了攻击侧通信诊断结果，图 \ref{fig:diag_move} 给出了移动侧通信诊断结果。
+为了进一步分析通信模块的行为，本文对攻击子空间融合与攻移双流通信中的若干中间指标进行了诊断，包括注意力熵、无通信概率、门控均值与消息范数。图 \ref{fig:diag_attack} 给出了攻击侧通信诊断结果，图 \ref{fig:diag_move} 给出了移动侧通信诊断结果。
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_attack.png}
-    \caption{v4 与 v5 攻击侧通信诊断结果}
+    \caption{攻击子空间融合与攻移双流通信的攻击侧诊断结果}
     \label{fig:diag_attack}
 \end{figure}
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_move.png}
-    \caption{v5 移动侧通信诊断结果}
+    \caption{攻移双流通信的移动侧诊断结果}
     \label{fig:diag_move}
 \end{figure}
 
-从攻击侧诊断结果看，v4 的 Targeted Fusion 能够在较小结构代价下稳定影响攻击决策，这也是其具有较强可解释性的主要原因。相比之下，v5 在攻击流上依然可以保持一定稳定性，但其真正的难点出现在移动流。
+从攻击侧诊断结果看，攻击子空间融合能够在较小结构代价下稳定影响攻击决策，这也是其具有较强可解释性的主要原因。相比之下，攻移双流通信在攻击流上依然可以保持一定稳定性，但其真正的难点出现在移动流。
 
 从移动侧诊断结果看，朴素双流结构中的移动消息更容易产生高熵平均现象，说明多个邻居的局部拓扑信息在未经约束的情况下容易被均值化。引入 top-1 稀疏路由后，移动流能够更明确地选择单个关键邻居，从而改善协同质量。进一步引入 softplus 门控后，方法的跨 seed 稳定性有所提升，但性能上界并未同步显著提高，说明当前瓶颈主要来自通信内容与稀疏路由方式，而非单纯的门控激活函数。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO Backbone，并在此基础上系统比较了 v1--v5 五类轻量通信结构。
+本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO Backbone，并在此基础上系统比较了五类轻量通信算法。
 
 实验结果表明：轻量、残差式、低带宽通信能够在不破坏 Backbone 的前提下发挥作用；语义明确的动作意图信息比抽象隐层特征更容易被策略有效利用；将通信限制在攻击子空间能够增强结构可解释性；对移动协同而言，硬稀疏路由比简单放大通信强度更关键。上述结果为后续进一步完善信息交互算法设计提供了实验依据。

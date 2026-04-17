@@ -40,6 +40,7 @@ init_load_strict: False # Whether initialization loading should require an exact
 init_load_actor: True # Load actor/mac weights during initialization
 init_load_critic: True # Load critic weights during initialization
 init_load_value_norm: True # Load value normalizer stats during initialization when available
+init_test_nepisode: 64 # Number of episodes for the one-shot evaluation right after init_checkpoint_path loading (0 disables it)
 save_replay: False # Saving the replay of the model loaded from checkpoint_path
 local_results_path: "results" # Path for local results
 

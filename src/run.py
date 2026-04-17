@@ -153,6 +153,46 @@ def evaluate_sequential(args, runner):
     runner.close_env()
 
 
+def _normalize_test_nepisode(test_nepisode, batch_size):
+    test_nepisode = max(1, int(test_nepisode))
+    if test_nepisode < batch_size:
+        return batch_size
+    return (test_nepisode // batch_size) * batch_size
+
+
+def run_init_test_sequential(args, runner, logger):
+    init_test_nepisode = int(getattr(args, "init_test_nepisode", 64))
+    if init_test_nepisode <= 0:
+        return False
+
+    normalized_test_nepisode = _normalize_test_nepisode(
+        init_test_nepisode, runner.batch_size
+    )
+    original_test_nepisode = args.test_nepisode
+    original_t_env = runner.t_env
+
+    logger.console_logger.info(
+        "Running init checkpoint evaluation at t_env=0 for {} test episodes".format(
+            normalized_test_nepisode
+        )
+    )
+
+    try:
+        args.test_nepisode = normalized_test_nepisode
+        runner.args.test_nepisode = normalized_test_nepisode
+        runner.t_env = 0
+
+        n_test_runs = max(1, normalized_test_nepisode // runner.batch_size)
+        for _ in range(n_test_runs):
+            runner.run(test_mode=True)
+    finally:
+        args.test_nepisode = original_test_nepisode
+        runner.args.test_nepisode = original_test_nepisode
+        runner.t_env = original_t_env
+
+    return True
+
+
 def save_one_buffer(args, save_buffer, env_name, from_start=False):
     x_env_name = env_name
     if from_start:
@@ -239,6 +279,8 @@ def run_sequential(args, logger):
     if args.use_cuda:
         learner.cuda()
 
+    init_test_ran = False
+
     if args.checkpoint_path != "":
         model_path, timestep_to_load = _resolve_model_path(args.checkpoint_path, args.load_step, logger)
         if model_path is None:
@@ -274,9 +316,11 @@ def run_sequential(args, logger):
             evaluate_sequential(args, runner)
             return
 
+        init_test_ran = run_init_test_sequential(args, runner, logger)
+
     # start training
     episode = 0
-    last_test_T = -args.test_interval - 1
+    last_test_T = 0 if init_test_ran else -args.test_interval - 1
     last_log_T = 0
     model_save_time = 0
 
