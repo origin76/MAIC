@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
 ENV_CONFIG="${1:-sc2_5m_vs_6m_local}"
 
 for SEED in 1 2 3; do
