@@ -1,0 +1,145 @@
+# --- v7-IGG: dual-stream communication with information gain gating ---
+#
+# Replaces the hardcoded warmup schedule with a self-supervised information
+# gain gate (IGG).  Two forces are held in tension:
+#
+#   1. Sparsity prior  — gate is penalized for being open (default-closed)
+#   2. Usegate signal  — gate is rewarded when comm demonstrably helps the actor
+#
+# The natural curriculum emerges without explicit phase boundaries:
+#   early  : delta is zero-initialised → log-ratio ≈ 0 → gain ≈ 0 → sparsity wins → gate closed
+#   middle : backbone improves, delta grows, positive gain appears → gate opens against sparsity
+#   late   : stable equilibrium — gate open degree = info-gain benefit vs sparsity cost
+
+action_selector: "multinomial"
+epsilon_start: 0.0
+epsilon_finish: 0.0
+epsilon_anneal_time: 1
+test_greedy: True
+
+runner: "parallel_local_safe"
+batch_size_run: 4
+env_reset_stagger_sec: 0.0
+
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "mappo_agentwise_centralized_officialish_learner"
+mac: "maic_mac"
+agent: "vanilla_mappo_microcomm_dualstream_counterfactual_usegate"
+
+rnn_hidden_dim: 64
+
+attention_dim: 16
+attention_heads: 1
+comm_value_dim: 8
+comm_topk: 1
+move_comm_value_dim: 8
+move_comm_topk: 2
+log_attention_maps: False
+comm_detach_backbone: False
+comm_lr_multiplier: 1.0
+attention_entropy_loss_weight: 0.0
+
+# IGG: factor is always 1.0 — the gate itself acts as the curriculum.
+comm_warmup_delay_steps: 0
+comm_warmup_steps: 0
+comm_warmup_start_factor: 1.0
+comm_warmup_end_factor: 1.0
+move_readiness_warmup: False
+
+semantic_action_offset: 6
+relation_feature_indices: [0, 1, 2, 3, 4]
+targeted_sender_state_dim: 2
+use_no_comm_token: True
+intent_detach: False
+intent_mask_unavailable: True
+
+attack_fusion_scale: 0.1
+attack_gate_init_bias: -2.5
+attack_gate_floor: 0.02
+attack_gate_activation: "sigmoid"
+attack_gate_softplus_beta: 1.0
+attack_gate_scale: 1.0
+attack_delta_zero_init: True
+
+move_self_feature_indices: [0]
+move_carrier_mode: "semantic_threat"
+move_enemy_visible_index: 0
+move_enemy_distance_index: 1
+move_ally_visible_index: 0
+move_ally_distance_index: 1
+move_fusion_scale: 0.05
+move_gate_init_bias: -3.0
+move_gate_floor: 0.02
+move_gate_activation: "sigmoid"
+move_gate_softplus_beta: 1.0
+move_gate_scale: 1.0
+move_delta_zero_init: True
+move_distance_penalty_coef: 0.0
+move_distance_relation_index: 1
+
+# Attention routing is learned entirely by PPO gradient.
+# The one-sided clamp in move_no_comm_loss makes it structurally unable to push
+# no_comm_prob upward from 0, so both target losses are disabled.
+move_entropy_target: 0.5
+move_entropy_target_loss_weight: 0.0
+move_no_comm_target: 0.65
+move_no_comm_target_loss_weight: 0.0
+
+# IGG supervision: sparsity provides the default-closed prior that the warmup
+# delay previously supplied.
+counterfactual_usegate: True
+counterfactual_usegate_gain_temp: 0.1
+counterfactual_usegate_attack_loss_weight: 0.05
+counterfactual_usegate_move_loss_weight: 0.02
+counterfactual_usegate_attack_sparsity_weight: 0.002
+counterfactual_usegate_move_sparsity_weight: 0.001
+
+critic_use_local_obs: True
+critic_use_last_action: True
+critic_use_agent_id: True
+
+use_valuenorm: True
+use_huber_loss: True
+huber_delta: 10.0
+use_policy_active_masks: True
+use_value_active_masks: True
+use_clipped_value_loss: True
+
+use_linear_lr_decay: True
+actor_min_lr_ratio: 0.1
+critic_min_lr_ratio: 1.0
+target_kl: 0.02
+
+ppo_epochs: 6
+ppo_clip_param: 0.2
+value_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.02
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0004
+critic_lr: 0.0007
+optim_eps: 0.00001
+grad_norm_clip: 5
+
+t_max: 1500000
+
+save_model: True
+save_model_interval: 25000
+
+init_checkpoint_path: ""
+init_load_step: 0
+init_load_strict: False
+init_load_actor: True
+init_load_critic: True
+init_load_value_norm: True
+init_test_nepisode: 0
+
+name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg"

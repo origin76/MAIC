@@ -84,6 +84,9 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.move_self_feature_indices = list(
             getattr(args, "move_self_feature_indices", [0])
         )
+        self.counterfactual_usegate = bool(
+            getattr(args, "counterfactual_usegate", False)
+        )
 
         if len(self.move_self_feature_indices) == 0:
             raise ValueError("move_self_feature_indices must be non-empty")
@@ -379,6 +382,10 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             local_attack_logits
             + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
         )
+        counterfactual_attack_logits = (
+            local_attack_logits
+            + (self.attack_fusion_scale * step_warmup_factor) * attack_delta
+        )
 
         move_fusion_input = th.cat([agent_hidden, move_messages], dim=-1)
         move_gate_logits = self.move_gate(
@@ -398,6 +405,10 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         fused_move_logits = (
             local_move_logits
             + (self.move_fusion_scale * move_comm_factor) * move_gate * move_delta
+        )
+        counterfactual_move_logits = (
+            local_move_logits
+            + (self.move_fusion_scale * move_comm_factor) * move_delta
         )
 
         final_logits = th.cat([fused_move_logits, fused_attack_logits], dim=-1)
@@ -427,6 +438,41 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     (self.move_no_comm_target_loss_weight * move_comm_factor)
                     * move_no_comm_gap.clamp(min=0.0).pow(2)
                 )
+            if (
+                self.counterfactual_usegate
+                and kwargs.get("collect_sequence_data", False)
+                and step_warmup_factor > 0
+            ):
+                local_policy = self._build_full_policy_probs(
+                    local_logits, avail_actions
+                ).detach()
+                counterfactual_attack_policy = self._build_full_policy_probs(
+                    th.cat(
+                        [local_move_logits, counterfactual_attack_logits], dim=-1
+                    ),
+                    avail_actions,
+                ).detach()
+                counterfactual_move_policy = self._build_full_policy_probs(
+                    th.cat(
+                        [counterfactual_move_logits, local_attack_logits], dim=-1
+                    ),
+                    avail_actions,
+                ).detach()
+                returns[
+                    "seq_counterfactual_local_policy"
+                ] = local_policy
+                returns[
+                    "seq_counterfactual_attack_policy"
+                ] = counterfactual_attack_policy
+                returns[
+                    "seq_counterfactual_move_policy"
+                ] = counterfactual_move_policy
+                returns[
+                    "seq_counterfactual_attack_usegate_pred"
+                ] = th.sigmoid(attack_gate_logits)
+                returns[
+                    "seq_counterfactual_move_usegate_pred"
+                ] = th.sigmoid(move_gate_logits)
             if kwargs.get("prepare_for_logging", False):
                 returns["logs"] = self.build_logging_payload(
                     attack_alpha=attack_alpha,
@@ -471,6 +517,15 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_probs = F.softmax(masked_logits, dim=-1)
         valid_mask = (move_avail_actions.sum(dim=-1, keepdim=True) > 0).float()
         return move_probs * valid_mask
+
+    def _build_full_policy_probs(self, logits, avail_actions):
+        if avail_actions is None:
+            return F.softmax(logits, dim=-1)
+
+        masked_logits = logits.masked_fill(avail_actions == 0, -1e10)
+        policy = F.softmax(masked_logits, dim=-1)
+        valid_mask = (avail_actions.sum(dim=-1, keepdim=True) > 0).float()
+        return policy * valid_mask
 
     def _extract_own_state_features(self, raw_obs, batch_size, device):
         own_feat_count = len(self.move_self_feature_indices)

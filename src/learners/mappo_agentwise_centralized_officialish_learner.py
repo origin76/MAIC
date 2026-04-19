@@ -1,6 +1,7 @@
 import os
 
 import torch as th
+import torch.nn.functional as F
 from torch.optim import Adam
 
 from .budgeted_sparse_mappo_learner import BudgetedSparseMAPPOLearner
@@ -72,7 +73,10 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
 
         with th.no_grad():
             old_policy, _ = self._forward_policy(
-                batch, prepare_for_logging=False, t_env=t_env
+                batch,
+                prepare_for_logging=False,
+                t_env=t_env,
+                collect_sequence_data=False,
             )
             old_log_probs = self._get_action_log_probs(old_policy, actions)
 
@@ -96,6 +100,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 batch,
                 prepare_for_logging=(epoch_idx == 0 and t_env - self.log_stats_t >= self.args.learner_log_interval),
                 t_env=t_env,
+                collect_sequence_data=getattr(self.args, "counterfactual_usegate", False),
             )
             new_log_probs = self._get_action_log_probs(policy, actions)
             entropy = self._policy_entropy(policy)
@@ -112,7 +117,13 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             policy_loss = -(th.min(surr1, surr2) * policy_mask).sum() / policy_mask.sum().clamp(min=1.0)
             entropy_loss = -(entropy * policy_mask).sum() / policy_mask.sum().clamp(min=1.0)
 
-            aux_loss, aux_loss_dict = self._process_extra_losses(extra, batch)
+            aux_loss, aux_loss_dict = self._process_extra_losses(
+                extra,
+                batch,
+                actions=actions,
+                advantages=policy_advantages,
+                policy_mask=policy_mask,
+            )
             actor_loss = policy_loss + self.args.entropy_coef * entropy_loss + aux_loss
 
             self.actor_optimiser.zero_grad()
@@ -189,6 +200,206 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             self.logger.log_stat("ppo_epochs_ran", float(len(actor_log_stats)), t_env)
             self.logger.log_stat("kl_early_stop", 1.0 if kl_stop_triggered else 0.0, t_env)
             self.log_stats_t = t_env
+
+    def _forward_policy(
+        self,
+        batch,
+        prepare_for_logging=False,
+        t_env=None,
+        collect_sequence_data=False,
+    ):
+        outputs = []
+        loss_items = []
+        logs = []
+        sequence_items = {}
+
+        self.mac.init_hidden(batch.batch_size)
+        for t in range(batch.max_seq_length - 1):
+            agent_outs, extra = self.mac.forward(
+                batch,
+                t=t,
+                test_mode=False,
+                train_mode=True,
+                prepare_for_logging=prepare_for_logging,
+                t_env=t_env,
+                collect_sequence_data=collect_sequence_data,
+            )
+            outputs.append(agent_outs)
+
+            if "logs" in extra:
+                logs.append(extra["logs"])
+                del extra["logs"]
+
+            for key in list(extra.keys()):
+                if str(key).startswith("seq_"):
+                    sequence_items.setdefault(key, []).append(extra.pop(key))
+
+            loss_items.append(extra)
+
+        policy = th.stack(outputs, dim=1)
+        merged = self._merge_extra_items(loss_items, logs)
+        for key, values in sequence_items.items():
+            merged[key] = th.stack(values, dim=1)
+        return policy, merged
+
+    def _process_extra_losses(
+        self,
+        extra,
+        batch,
+        actions=None,
+        advantages=None,
+        policy_mask=None,
+    ):
+        total, loss_dict = super()._process_extra_losses(extra, batch)
+
+        if (
+            not getattr(self.args, "counterfactual_usegate", False)
+            or actions is None
+            or advantages is None
+            or policy_mask is None
+        ):
+            return total, loss_dict
+
+        required_keys = (
+            "seq_counterfactual_local_policy",
+            "seq_counterfactual_attack_policy",
+            "seq_counterfactual_move_policy",
+            "seq_counterfactual_attack_usegate_pred",
+            "seq_counterfactual_move_usegate_pred",
+        )
+        if any(key not in extra for key in required_keys):
+            return total, loss_dict
+
+        local_policy = extra["seq_counterfactual_local_policy"]
+        attack_policy = extra["seq_counterfactual_attack_policy"]
+        move_policy = extra["seq_counterfactual_move_policy"]
+        attack_pred = extra["seq_counterfactual_attack_usegate_pred"].squeeze(-1)
+        move_pred = extra["seq_counterfactual_move_usegate_pred"].squeeze(-1)
+
+        local_log_probs = self._get_action_log_probs(local_policy, actions)
+        attack_log_probs = self._get_action_log_probs(attack_policy, actions)
+        move_log_probs = self._get_action_log_probs(move_policy, actions)
+
+        action_ids = actions.squeeze(-1)
+        semantic_action_offset = int(
+            getattr(self.args, "semantic_action_offset", 6)
+        )
+        attack_mask = (
+            (action_ids >= semantic_action_offset).float() * policy_mask
+        )
+        move_mask = (
+            (action_ids < semantic_action_offset).float() * policy_mask
+        )
+
+        attack_gain = advantages * (attack_log_probs - local_log_probs)
+        move_gain = advantages * (move_log_probs - local_log_probs)
+
+        gain_temp = max(
+            1e-6,
+            float(getattr(self.args, "counterfactual_usegate_gain_temp", 0.1)),
+        )
+        attack_target = (
+            1.0 - th.exp(-F.relu(attack_gain.detach()) / gain_temp)
+        )
+        move_target = (
+            1.0 - th.exp(-F.relu(move_gain.detach()) / gain_temp)
+        )
+
+        zero = batch["reward"].new_zeros(())
+        attack_loss = zero
+        move_loss = zero
+        sparsity_loss = zero
+
+        attack_denom = attack_mask.sum().clamp(min=1.0)
+        move_denom = move_mask.sum().clamp(min=1.0)
+        full_denom = policy_mask.sum().clamp(min=1.0)
+
+        # Usegate loss is applied only where gain > 0 (push gate open).
+        # Sparsity handles the default-closed direction; applying loss toward
+        # target=0 when gain<=0 would lock the gate shut against noisy baselines.
+        positive_attack_mask = (attack_gain.detach() > 0).float() * attack_mask
+        positive_move_mask = (move_gain.detach() > 0).float() * move_mask
+
+        attack_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_attack_loss_weight",
+                0.0,
+            )
+        )
+        move_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_move_loss_weight",
+                0.0,
+            )
+        )
+        attack_sparse_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_attack_sparsity_weight",
+                0.0,
+            )
+        )
+        move_sparse_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_move_sparsity_weight",
+                0.0,
+            )
+        )
+
+        if attack_weight > 0:
+            attack_loss = attack_weight * (
+                ((attack_pred - attack_target).pow(2) * positive_attack_mask).sum()
+                / positive_attack_mask.sum().clamp(min=1.0)
+            )
+        if move_weight > 0:
+            move_loss = move_weight * (
+                ((move_pred - move_target).pow(2) * positive_move_mask).sum()
+                / positive_move_mask.sum().clamp(min=1.0)
+            )
+        if attack_sparse_weight > 0:
+            sparsity_loss = sparsity_loss + attack_sparse_weight * (
+                (attack_pred * policy_mask).sum() / full_denom
+            )
+        if move_sparse_weight > 0:
+            sparsity_loss = sparsity_loss + move_sparse_weight * (
+                (move_pred * policy_mask).sum() / full_denom
+            )
+
+        total = total + attack_loss + move_loss + sparsity_loss
+
+        loss_dict["counterfactual_attack_usegate_loss"] = attack_loss.detach()
+        loss_dict["counterfactual_move_usegate_loss"] = move_loss.detach()
+        if attack_sparse_weight > 0 or move_sparse_weight > 0:
+            loss_dict["counterfactual_usegate_sparsity_loss"] = sparsity_loss.detach()
+        loss_dict["counterfactual_attack_gain_mean"] = (
+            (attack_gain.detach() * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_move_gain_mean"] = (
+            (move_gain.detach() * move_mask).sum() / move_denom
+        )
+        loss_dict["counterfactual_attack_target_mean"] = (
+            (attack_target * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_move_target_mean"] = (
+            (move_target * move_mask).sum() / move_denom
+        )
+        loss_dict["counterfactual_attack_pred_mean"] = (
+            (attack_pred.detach() * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_move_pred_mean"] = (
+            (move_pred.detach() * move_mask).sum() / move_denom
+        )
+        loss_dict["counterfactual_attack_positive_ratio"] = (
+            ((attack_gain.detach() > 0).float() * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_move_positive_ratio"] = (
+            ((move_gain.detach() > 0).float() * move_mask).sum() / move_denom
+        )
+
+        return total, loss_dict
 
     def _build_active_masks(self, batch):
         avail_actions = batch["avail_actions"][:, :-1]
