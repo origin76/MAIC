@@ -40,6 +40,47 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.move_distance_relation_index = getattr(
             args, "move_distance_relation_index", 1
         )
+        self.comm_warmup_steps = int(getattr(args, "comm_warmup_steps", 0))
+        self.comm_warmup_delay_steps = int(
+            getattr(args, "comm_warmup_delay_steps", 0)
+        )
+        self.comm_warmup_start_factor = float(
+            getattr(args, "comm_warmup_start_factor", 1.0)
+        )
+        self.comm_warmup_end_factor = float(
+            getattr(args, "comm_warmup_end_factor", 1.0)
+        )
+        self.move_readiness_warmup = bool(
+            getattr(args, "move_readiness_warmup", False)
+        )
+        self.move_readiness_factor_floor = float(
+            getattr(args, "move_readiness_factor_floor", 1.0)
+        )
+        self.move_readiness_entropy_low = float(
+            getattr(args, "move_readiness_entropy_low", 0.5)
+        )
+        self.move_readiness_entropy_high = float(
+            getattr(args, "move_readiness_entropy_high", 0.5)
+        )
+        self.move_readiness_no_comm_low = float(
+            getattr(args, "move_readiness_no_comm_low", 0.0)
+        )
+        self.move_readiness_no_comm_high = float(
+            getattr(args, "move_readiness_no_comm_high", 0.0)
+        )
+        self.move_carrier_mode = getattr(args, "move_carrier_mode", "default")
+        self.move_enemy_visible_index = getattr(args, "move_enemy_visible_index", 0)
+        self.move_enemy_distance_index = getattr(args, "move_enemy_distance_index", 1)
+        self.move_ally_visible_index = getattr(args, "move_ally_visible_index", 0)
+        self.move_ally_distance_index = getattr(args, "move_ally_distance_index", 1)
+        self.move_entropy_target = getattr(args, "move_entropy_target", None)
+        self.move_entropy_target_loss_weight = getattr(
+            args, "move_entropy_target_loss_weight", 0.0
+        )
+        self.move_no_comm_target = getattr(args, "move_no_comm_target", None)
+        self.move_no_comm_target_loss_weight = getattr(
+            args, "move_no_comm_target_loss_weight", 0.0
+        )
         self.move_self_feature_indices = list(
             getattr(args, "move_self_feature_indices", [0])
         )
@@ -48,8 +89,38 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             raise ValueError("move_self_feature_indices must be non-empty")
         if self.semantic_action_offset <= 0:
             raise ValueError("semantic_action_offset must be positive")
+        if self.move_entropy_target_loss_weight > 0 and self.move_entropy_target is None:
+            raise ValueError(
+                "move_entropy_target must be set when move_entropy_target_loss_weight > 0"
+            )
+        if (
+            self.move_no_comm_target_loss_weight > 0
+            and self.move_no_comm_target is None
+        ):
+            raise ValueError(
+                "move_no_comm_target must be set when move_no_comm_target_loss_weight > 0"
+            )
+        if self.move_no_comm_target_loss_weight > 0 and not self.use_no_comm_token:
+            raise ValueError(
+                "move_no_comm_target_loss_weight requires use_no_comm_token=True"
+            )
+        if self.move_carrier_mode not in {"default", "semantic_threat"}:
+            raise ValueError(
+                "Unsupported move_carrier_mode '{}'".format(
+                    self.move_carrier_mode
+                )
+            )
+        if self.move_readiness_factor_floor <= 0.0 or self.move_readiness_factor_floor > 1.0:
+            raise ValueError("move_readiness_factor_floor must be in (0, 1]")
+        if self.move_readiness_entropy_high < self.move_readiness_entropy_low:
+            raise ValueError("move_readiness_entropy_high must be >= move_readiness_entropy_low")
+        if self.move_readiness_no_comm_high < self.move_readiness_no_comm_low:
+            raise ValueError("move_readiness_no_comm_high must be >= move_readiness_no_comm_low")
 
-        self.move_sender_state_dim = len(self.move_self_feature_indices) + 1
+        if self.move_carrier_mode == "semantic_threat":
+            self.move_sender_state_dim = len(self.move_self_feature_indices) + 4
+        else:
+            self.move_sender_state_dim = len(self.move_self_feature_indices) + 1
         self.move_flat_comm_dim = self.attention_heads * self.move_comm_value_dim
 
         self.move_query_proj = nn.Linear(
@@ -111,6 +182,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         h_in = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
         h = self.rnn(x, h_in)
         agent_hidden = h.reshape(bs, self.n_agents, -1)
+        step_warmup_factor = self._compute_comm_warmup_factor(kwargs.get("t_env", None))
 
         raw_obs = kwargs.get("raw_obs", None)
         avail_actions = kwargs.get("avail_actions", None)
@@ -130,9 +202,42 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         own_state_features = self._extract_own_state_features(
             raw_obs, bs, agent_hidden.device
         )
-        move_value_source = th.cat(
-            [move_probs, own_state_features, move_top1_mass], dim=-1
-        )
+        if attack_avail_actions is None:
+            can_attack = move_probs.new_ones(bs, self.n_agents, 1)
+        else:
+            can_attack = (
+                attack_avail_actions.sum(dim=-1, keepdim=True) > 0
+            ).float()
+
+        move_enemy_pressure = None
+        move_ally_support = None
+        move_retreat_urgency = None
+        move_engage_readiness = None
+        if self.move_carrier_mode == "semantic_threat":
+            move_enemy_pressure = self._compute_move_enemy_pressure(
+                raw_obs, bs, agent_hidden.device
+            )
+            move_ally_support = self._compute_move_ally_support(
+                raw_obs, bs, agent_hidden.device
+            )
+            own_health_proxy = own_state_features[:, :, :1]
+            move_retreat_urgency = move_enemy_pressure * (1.0 - own_health_proxy)
+            move_engage_readiness = move_enemy_pressure * can_attack
+            move_value_source = th.cat(
+                [
+                    move_probs,
+                    own_state_features,
+                    move_retreat_urgency,
+                    move_engage_readiness,
+                    move_ally_support,
+                    move_top1_mass,
+                ],
+                dim=-1,
+            )
+        else:
+            move_value_source = th.cat(
+                [move_probs, own_state_features, move_top1_mass], dim=-1
+            )
         if self.intent_detach:
             move_value_source = move_value_source.detach()
         move_sender_values = self.move_value_proj(move_value_source).reshape(
@@ -143,13 +248,6 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             local_attack_logits, attack_avail_actions
         )
         attack_top1_mass = attack_probs.max(dim=-1, keepdim=True)[0]
-        if attack_avail_actions is None:
-            can_attack = attack_probs.new_ones(bs, self.n_agents, 1)
-        else:
-            can_attack = (
-                attack_avail_actions.sum(dim=-1, keepdim=True) > 0
-            ).float()
-
         attack_value_source = th.cat(
             [attack_probs, can_attack, attack_top1_mass], dim=-1
         )
@@ -215,6 +313,17 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_alpha = F.softmax(
             self._apply_topk_mask_with_k(move_scores, self.move_topk), dim=2
         )
+        move_entropy = self._compute_mean_attention_entropy(move_alpha)
+        if self.use_no_comm_token:
+            move_no_comm_prob = move_alpha[:, :, -1, :].mean()
+        else:
+            move_no_comm_prob = move_alpha.new_zeros(())
+        (
+            move_readiness_factor,
+            move_entropy_ready,
+            move_no_comm_ready,
+        ) = self._compute_move_readiness_factor(move_entropy, move_no_comm_prob)
+        move_comm_factor = step_warmup_factor * move_readiness_factor
 
         expanded_attack_values = sender_values.unsqueeze(1).expand(
             -1, self.n_agents, -1, -1, -1
@@ -268,7 +377,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         ).reshape(bs, self.n_agents, self.attack_action_dim)
         fused_attack_logits = (
             local_attack_logits
-            + self.attack_fusion_scale * attack_gate * attack_delta
+            + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
         )
 
         move_fusion_input = th.cat([agent_hidden, move_messages], dim=-1)
@@ -287,7 +396,8 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             move_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.semantic_action_offset)
         fused_move_logits = (
-            local_move_logits + self.move_fusion_scale * move_gate * move_delta
+            local_move_logits
+            + (self.move_fusion_scale * move_comm_factor) * move_gate * move_delta
         )
 
         final_logits = th.cat([fused_move_logits, fused_attack_logits], dim=-1)
@@ -295,11 +405,28 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         returns = {}
         if kwargs.get("train_mode", False):
             attack_entropy = self._compute_mean_attention_entropy(attack_alpha)
-            move_entropy = self._compute_mean_attention_entropy(move_alpha)
             if self.attention_entropy_loss_weight > 0:
                 returns["attention_entropy_loss"] = (
                     0.5 * (attack_entropy + move_entropy)
                 ) * self.attention_entropy_loss_weight
+            move_entropy_gap = None
+            if self.move_entropy_target_loss_weight > 0:
+                target_entropy = move_entropy.new_tensor(float(self.move_entropy_target))
+                move_entropy_gap = move_entropy - target_entropy
+                returns["move_selective_entropy_loss"] = (
+                    (self.move_entropy_target_loss_weight * move_comm_factor)
+                    * move_entropy_gap.pow(2)
+                )
+            move_no_comm_gap = None
+            if self.move_no_comm_target_loss_weight > 0:
+                target_no_comm = move_no_comm_prob.new_tensor(
+                    float(self.move_no_comm_target)
+                )
+                move_no_comm_gap = move_no_comm_prob - target_no_comm
+                returns["move_no_comm_loss"] = (
+                    (self.move_no_comm_target_loss_weight * move_comm_factor)
+                    * move_no_comm_gap.clamp(min=0.0).pow(2)
+                )
             if kwargs.get("prepare_for_logging", False):
                 returns["logs"] = self.build_logging_payload(
                     attack_alpha=attack_alpha,
@@ -316,6 +443,17 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     move_delta=move_delta,
                     move_probs=move_probs,
                     own_state_features=own_state_features,
+                    move_entropy_gap=move_entropy_gap,
+                    move_no_comm_gap=move_no_comm_gap,
+                    move_enemy_pressure=move_enemy_pressure,
+                    move_ally_support=move_ally_support,
+                    move_retreat_urgency=move_retreat_urgency,
+                    move_engage_readiness=move_engage_readiness,
+                    step_warmup_factor=step_warmup_factor,
+                    move_readiness_factor=move_readiness_factor,
+                    move_entropy_ready=move_entropy_ready,
+                    move_no_comm_ready=move_no_comm_ready,
+                    move_comm_factor=move_comm_factor,
                 )
 
         return final_logits.reshape(bs * self.n_agents, self.n_actions), h, returns
@@ -346,6 +484,105 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
 
         own_feats = raw_obs[:, :, self.own_feat_start : self.own_feat_end]
         return own_feats[:, :, self.move_self_feature_indices]
+
+    def _extract_enemy_features(self, raw_obs, batch_size, device):
+        if raw_obs is None:
+            return th.zeros(
+                batch_size,
+                self.n_agents,
+                self.attack_action_dim,
+                2,
+                device=device,
+            )
+
+        self._maybe_init_obs_layout(raw_obs.size(-1))
+        enemy_flat = raw_obs[:, :, self.enemy_feat_start : self.enemy_feat_end]
+        return enemy_flat.reshape(
+            raw_obs.size(0), self.n_agents, self.attack_action_dim, self.enemy_feat_dim
+        )
+
+    def _extract_sender_ally_features(self, raw_obs, batch_size, device):
+        if raw_obs is None:
+            return th.zeros(
+                batch_size,
+                self.n_agents,
+                self.n_agents - 1,
+                2,
+                device=device,
+            )
+
+        self._maybe_init_obs_layout(raw_obs.size(-1))
+        ally_flat = raw_obs[:, :, self.ally_feat_start : self.ally_feat_end]
+        return ally_flat.reshape(
+            raw_obs.size(0), self.n_agents, self.n_agents - 1, self.ally_feat_dim
+        )
+
+    def _compute_move_enemy_pressure(self, raw_obs, batch_size, device):
+        enemy_feats = self._extract_enemy_features(raw_obs, batch_size, device)
+        visible = enemy_feats[:, :, :, self.move_enemy_visible_index]
+        distance = enemy_feats[:, :, :, self.move_enemy_distance_index]
+        closeness = visible * th.clamp(1.0 - distance, min=0.0)
+        return closeness.max(dim=-1, keepdim=True)[0]
+
+    def _compute_move_ally_support(self, raw_obs, batch_size, device):
+        ally_feats = self._extract_sender_ally_features(raw_obs, batch_size, device)
+        visible = ally_feats[:, :, :, self.move_ally_visible_index]
+        distance = ally_feats[:, :, :, self.move_ally_distance_index]
+        closeness = visible * th.clamp(1.0 - distance, min=0.0)
+        return closeness.mean(dim=-1, keepdim=True)
+
+    def _compute_comm_warmup_factor(self, t_env):
+        if self.comm_warmup_steps <= 0:
+            return 1.0
+
+        delay_steps = max(0, self.comm_warmup_delay_steps)
+        if t_env is None:
+            progress = 1.0
+        else:
+            shifted_t = float(t_env) - float(delay_steps)
+            progress = float(
+                max(0.0, min(1.0, shifted_t / float(self.comm_warmup_steps)))
+            )
+
+        return (
+            self.comm_warmup_start_factor
+            + (self.comm_warmup_end_factor - self.comm_warmup_start_factor) * progress
+        )
+
+    def _compute_move_readiness_factor(self, move_entropy, move_no_comm_prob):
+        if not self.move_readiness_warmup:
+            one = move_entropy.new_tensor(1.0)
+            return one, one, one
+
+        entropy_ready = self._compute_descending_readiness(
+            move_entropy,
+            self.move_readiness_entropy_low,
+            self.move_readiness_entropy_high,
+        )
+        if self.use_no_comm_token:
+            no_comm_ready = self._compute_descending_readiness(
+                move_no_comm_prob,
+                self.move_readiness_no_comm_low,
+                self.move_readiness_no_comm_high,
+            )
+        else:
+            no_comm_ready = move_entropy.new_tensor(1.0)
+
+        readiness_core = th.minimum(entropy_ready, no_comm_ready)
+        readiness_factor = (
+            self.move_readiness_factor_floor
+            + (1.0 - self.move_readiness_factor_floor) * readiness_core
+        )
+        return readiness_factor, entropy_ready, no_comm_ready
+
+    def _compute_descending_readiness(self, value, low, high):
+        if high <= low:
+            return (value <= low).float()
+
+        high_tensor = value.new_tensor(float(high))
+        low_tensor = value.new_tensor(float(low))
+        readiness = (high_tensor - value) / (high_tensor - low_tensor)
+        return readiness.clamp(min=0.0, max=1.0)
 
     def _maybe_init_own_layout(self, obs_shape):
         if self.own_feat_dim is not None:
@@ -419,6 +656,17 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_delta,
         move_probs,
         own_state_features,
+        move_entropy_gap=None,
+        move_no_comm_gap=None,
+        move_enemy_pressure=None,
+        move_ally_support=None,
+        move_retreat_urgency=None,
+        move_engage_readiness=None,
+        step_warmup_factor=1.0,
+        move_readiness_factor=1.0,
+        move_entropy_ready=1.0,
+        move_no_comm_ready=1.0,
+        move_comm_factor=1.0,
     ):
         logs = {}
 
@@ -472,6 +720,55 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             device=move_alpha.device,
         )
         logs["Scalar_targeted_move_own_state_mean"] = own_state_features.detach().mean()
+        if self.move_entropy_target is not None:
+            logs["Scalar_targeted_move_entropy_target"] = th.tensor(
+                float(self.move_entropy_target), device=move_alpha.device
+            )
+        logs["Scalar_targeted_move_entropy_target_loss_weight"] = th.tensor(
+            float(self.move_entropy_target_loss_weight), device=move_alpha.device
+        )
+        if move_entropy_gap is not None:
+            logs["Scalar_targeted_move_entropy_gap"] = move_entropy_gap.detach()
+        if self.move_no_comm_target is not None:
+            logs["Scalar_targeted_move_no_comm_target"] = th.tensor(
+                float(self.move_no_comm_target), device=move_alpha.device
+            )
+        logs["Scalar_targeted_move_no_comm_target_loss_weight"] = th.tensor(
+            float(self.move_no_comm_target_loss_weight), device=move_alpha.device
+        )
+        if move_no_comm_gap is not None:
+            logs["Scalar_targeted_move_no_comm_gap"] = move_no_comm_gap.detach()
+        if move_enemy_pressure is not None:
+            logs["Scalar_targeted_move_enemy_pressure"] = move_enemy_pressure.detach().mean()
+        if move_ally_support is not None:
+            logs["Scalar_targeted_move_ally_support"] = move_ally_support.detach().mean()
+        if move_retreat_urgency is not None:
+            logs["Scalar_targeted_move_retreat_urgency"] = move_retreat_urgency.detach().mean()
+        if move_engage_readiness is not None:
+            logs["Scalar_targeted_move_engage_readiness"] = move_engage_readiness.detach().mean()
+        logs["Scalar_targeted_comm_warmup_factor"] = th.tensor(
+            float(step_warmup_factor), device=move_alpha.device
+        )
+        logs["Scalar_targeted_move_readiness_factor"] = (
+            move_readiness_factor.detach()
+            if isinstance(move_readiness_factor, th.Tensor)
+            else th.tensor(float(move_readiness_factor), device=move_alpha.device)
+        )
+        logs["Scalar_targeted_move_entropy_ready"] = (
+            move_entropy_ready.detach()
+            if isinstance(move_entropy_ready, th.Tensor)
+            else th.tensor(float(move_entropy_ready), device=move_alpha.device)
+        )
+        logs["Scalar_targeted_move_no_comm_ready"] = (
+            move_no_comm_ready.detach()
+            if isinstance(move_no_comm_ready, th.Tensor)
+            else th.tensor(float(move_no_comm_ready), device=move_alpha.device)
+        )
+        logs["Scalar_targeted_move_comm_factor"] = (
+            move_comm_factor.detach()
+            if isinstance(move_comm_factor, th.Tensor)
+            else th.tensor(float(move_comm_factor), device=move_alpha.device)
+        )
 
         logs["Scalar_targeted_relation_visible_ratio"] = relation_features[:, :, :, 0].detach().mean()
         logs["Scalar_targeted_no_comm_prob"] = 0.5 * (

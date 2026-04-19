@@ -1,0 +1,105 @@
+# --- Dual-stream targeted micro communication with top-2 move routing, softplus gates, and selective move top-2 regularization ---
+
+action_selector: "multinomial"
+epsilon_start: 0.0
+epsilon_finish: 0.0
+epsilon_anneal_time: 1
+test_greedy: True
+
+runner: "parallel_local_safe"
+batch_size_run: 4
+env_reset_stagger_sec: 0.0
+
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "mappo_agentwise_centralized_officialish_learner"
+mac: "maic_mac"
+agent: "vanilla_mappo_microcomm_dualstream_targeted_fusion"
+
+rnn_hidden_dim: 64
+
+attention_dim: 16
+attention_heads: 1
+comm_value_dim: 8
+comm_topk: 1
+move_comm_value_dim: 8
+move_comm_topk: 2
+log_attention_maps: False
+comm_detach_backbone: False
+comm_lr_multiplier: 1.0
+attention_entropy_loss_weight: 0.0
+
+semantic_action_offset: 6
+relation_feature_indices: [0, 1, 2, 3, 4]
+targeted_sender_state_dim: 2
+use_no_comm_token: True
+intent_detach: False
+intent_mask_unavailable: True
+
+attack_fusion_scale: 0.1
+attack_gate_init_bias: -2.5
+attack_gate_floor: 0.0
+attack_gate_activation: "softplus"
+attack_gate_softplus_beta: 1.0
+attack_gate_scale: 1.0
+attack_delta_zero_init: True
+
+move_self_feature_indices: [0]
+move_fusion_scale: 0.05
+move_gate_init_bias: -3.0
+move_gate_floor: 0.0
+move_gate_activation: "softplus"
+move_gate_softplus_beta: 1.0
+move_gate_scale: 1.0
+move_delta_zero_init: True
+move_distance_penalty_coef: 0.0
+move_distance_relation_index: 1
+move_entropy_target: 0.5
+move_entropy_target_loss_weight: 0.01
+
+critic_use_local_obs: True
+critic_use_last_action: True
+critic_use_agent_id: True
+
+use_valuenorm: True
+use_huber_loss: True
+huber_delta: 10.0
+use_policy_active_masks: True
+use_value_active_masks: True
+use_clipped_value_loss: True
+
+use_linear_lr_decay: False
+target_kl: 0.02
+
+ppo_epochs: 6
+ppo_clip_param: 0.2
+value_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.02
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0001
+critic_lr: 0.0003
+optim_eps: 0.00001
+grad_norm_clip: 5
+
+t_max: 500000
+
+save_model: True
+save_model_interval: 25000
+
+init_checkpoint_path: "results/models/2026-04-13_10-42-26_vanilla_mappo_sc2_5m6m_agentwise_centralized_semistable_officialish_1p5m_lrdecay_klstop_relaxactor_sc2_5m_vs_6m"
+init_load_step: 1404757
+init_load_strict: False
+init_load_actor: True
+init_load_critic: True
+init_load_value_norm: True
+init_test_nepisode: 64
+
+name: "vanilla_mappo_sc2_5m6m_microcomm_v5_dualstream_top2move_softplus_selective"

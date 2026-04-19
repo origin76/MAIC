@@ -111,7 +111,7 @@ class BudgetedSparseMAPPOLearner:
             self._log_for_scalar_and_histogram(actor_logs, t_env)
             self.log_stats_t = t_env
 
-    def _forward_policy(self, batch, prepare_for_logging=False):
+    def _forward_policy(self, batch, prepare_for_logging=False, t_env=None):
         outputs = []
         loss_items = []
         logs = []
@@ -123,6 +123,7 @@ class BudgetedSparseMAPPOLearner:
                 test_mode=False,
                 train_mode=True,
                 prepare_for_logging=prepare_for_logging,
+                t_env=t_env,
             )
             outputs.append(agent_outs)
             if "logs" in extra:

@@ -19,7 +19,13 @@ class MAICMAC:
     def select_actions(self, ep_batch, t_ep, t_env, bs=slice(None), test_mode=False):
         # Only select actions for the selected batch elements in bs
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        agent_outputs, _ = self.forward(ep_batch, t_ep, test_mode=test_mode, train_mode=False)
+        agent_outputs, _ = self.forward(
+            ep_batch,
+            t_ep,
+            test_mode=test_mode,
+            train_mode=False,
+            t_env=t_env,
+        )
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
         return chosen_actions
 

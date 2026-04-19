@@ -93,6 +93,10 @@ class VanillaMAPPOMicroCommTargetedFusionAgent(nn.Module):
             nn.init.constant_(self.attack_delta_head[-1].bias, 0.0)
 
         self._obs_layout_ready = False
+        self.move_feats_dim = None
+        self.enemy_feat_start = None
+        self.enemy_feat_end = None
+        self.enemy_feat_dim = None
         self.ally_feat_start = None
         self.ally_feat_end = None
         self.ally_feat_dim = None
@@ -231,9 +235,12 @@ class VanillaMAPPOMicroCommTargetedFusionAgent(nn.Module):
                 )
             )
 
+        self.move_feats_dim = move_feats_dim
         self.ally_feat_dim = numerator // denominator
-        enemy_feat_dim = self.ally_feat_dim
-        self.ally_feat_start = move_feats_dim + n_enemies * enemy_feat_dim
+        self.enemy_feat_dim = self.ally_feat_dim
+        self.enemy_feat_start = move_feats_dim
+        self.enemy_feat_end = self.enemy_feat_start + n_enemies * self.enemy_feat_dim
+        self.ally_feat_start = self.enemy_feat_end
         self.ally_feat_end = self.ally_feat_start + (self.n_agents - 1) * self.ally_feat_dim
 
         if self.ally_feat_end > obs_shape:

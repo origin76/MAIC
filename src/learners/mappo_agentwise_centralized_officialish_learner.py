@@ -71,7 +71,9 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         critic_mask = self._build_critic_mask(mask, active_masks)
 
         with th.no_grad():
-            old_policy, _ = self._forward_policy(batch, prepare_for_logging=False)
+            old_policy, _ = self._forward_policy(
+                batch, prepare_for_logging=False, t_env=t_env
+            )
             old_log_probs = self._get_action_log_probs(old_policy, actions)
 
             critic_outputs = self.critic(batch)
@@ -93,6 +95,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             policy, extra = self._forward_policy(
                 batch,
                 prepare_for_logging=(epoch_idx == 0 and t_env - self.log_stats_t >= self.args.learner_log_interval),
+                t_env=t_env,
             )
             new_log_probs = self._get_action_log_probs(policy, actions)
             entropy = self._policy_entropy(policy)
