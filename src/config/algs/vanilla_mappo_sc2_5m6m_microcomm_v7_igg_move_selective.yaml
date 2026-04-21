@@ -1,15 +1,12 @@
-# --- v7-IGG: dual-stream communication with information gain gating ---
+# --- v7-IGG (move-selective tweak): sharpen move routing, keep fusion strength ---
 #
-# Replaces the hardcoded warmup schedule with a self-supervised information
-# gain gate (IGG).  Two forces are held in tension:
+# Design goal:
+#   improve MOVE communication selectivity (routing sharpness),
+#   not communication strength (fusion gain).
 #
-#   1. Sparsity prior  — gate is penalized for being open (default-closed)
-#   2. Usegate signal  — gate is rewarded when comm demonstrably helps the actor
-#
-# The natural curriculum emerges without explicit phase boundaries:
-#   early  : delta is zero-initialised → log-ratio ≈ 0 → gain ≈ 0 → sparsity wins → gate closed
-#   middle : backbone improves, delta grows, positive gain appears → gate opens against sparsity
-#   late   : stable equilibrium — gate open degree = info-gain benefit vs sparsity cost
+# Minimal changes vs v7_igg:
+#   1) move attention temperature < 1.0  (sharper softmax over top-2)
+#   2) one-sided move entropy target loss (penalize only high entropy)
 
 action_selector: "multinomial"
 epsilon_start: 0.0
@@ -83,11 +80,11 @@ move_delta_zero_init: True
 move_distance_penalty_coef: 0.0
 move_distance_relation_index: 1
 
-# Attention routing is learned entirely by PPO gradient.
-# The one-sided clamp in move_no_comm_loss makes it structurally unable to push
-# no_comm_prob upward from 0, so both target losses are disabled.
-move_entropy_target: 0.5
-move_entropy_target_loss_weight: 0.0
+# Selectivity-only knobs (no gain scaling changes)
+move_attn_temperature: 0.85
+move_entropy_target: 0.58
+move_entropy_upper_only: True
+move_entropy_target_loss_weight: 0.02
 move_no_comm_target: 0.65
 move_no_comm_target_loss_weight: 0.0
 
@@ -142,4 +139,4 @@ init_load_critic: True
 init_load_value_norm: True
 init_test_nepisode: 0
 
-name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg"
+name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg_move_selective"

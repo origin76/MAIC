@@ -27,9 +27,21 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         self.critic = MAPPOAgentWiseCentralizedCritic(scheme, args)
         self.critic_params = list(self.critic.parameters())
 
+        self.actor_weight_decay = float(getattr(args, "actor_weight_decay", 0.0))
+        self.critic_weight_decay = float(getattr(args, "critic_weight_decay", 0.0))
         actor_optim_groups = self._build_actor_optim_groups()
-        self.actor_optimiser = Adam(actor_optim_groups, lr=args.lr, eps=args.optim_eps)
-        self.critic_optimiser = Adam(self.critic_params, lr=args.critic_lr, eps=args.optim_eps)
+        self.actor_optimiser = Adam(
+            actor_optim_groups,
+            lr=args.lr,
+            eps=args.optim_eps,
+            weight_decay=self.actor_weight_decay,
+        )
+        self.critic_optimiser = Adam(
+            self.critic_params,
+            lr=args.critic_lr,
+            eps=args.optim_eps,
+            weight_decay=self.critic_weight_decay,
+        )
         self.initial_actor_lr = args.lr
         self.initial_critic_lr = args.critic_lr
 
@@ -43,6 +55,28 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         self.actor_min_lr_ratio = getattr(args, "actor_min_lr_ratio", getattr(args, "min_lr_ratio", 0.0))
         self.critic_min_lr_ratio = getattr(args, "critic_min_lr_ratio", getattr(args, "min_lr_ratio", 0.0))
         self.target_kl = getattr(args, "target_kl", None)
+        self.advantage_clip = getattr(args, "advantage_clip", None)
+        self.counterfactual_usegate_soft_weighting = bool(
+            getattr(args, "counterfactual_usegate_soft_weighting", False)
+        )
+        self.counterfactual_usegate_weight_temp = float(
+            getattr(
+                args,
+                "counterfactual_usegate_weight_temp",
+                getattr(args, "counterfactual_usegate_gain_temp", 0.1),
+            )
+        )
+        self.counterfactual_usegate_gain_norm = bool(
+            getattr(args, "counterfactual_usegate_gain_norm", False)
+        )
+        self.counterfactual_usegate_gain_norm_ema_decay = float(
+            getattr(args, "counterfactual_usegate_gain_norm_ema_decay", 0.99)
+        )
+        self.counterfactual_usegate_gain_norm_eps = float(
+            getattr(args, "counterfactual_usegate_gain_norm_eps", 1e-6)
+        )
+        self._attack_gain_abs_ema = None
+        self._move_gain_abs_ema = None
 
         self.value_normalizer = ValueNorm(1, device="cpu") if self.use_valuenorm else None
         self.log_stats_t = -self.args.learner_log_interval - 1
@@ -85,6 +119,10 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             old_values = critic_outputs[:, :-1]
             returns, advantages = self._build_gae_targets(rewards, terminated, mask, values_for_returns)
             advantages = self._normalize_advantages(advantages, policy_mask)
+            if self.advantage_clip is not None:
+                clip_value = float(self.advantage_clip)
+                if clip_value > 0:
+                    advantages = advantages.clamp(min=-clip_value, max=clip_value)
 
             if self.value_normalizer is not None:
                 self.value_normalizer.update(returns, mask=critic_mask)
@@ -223,6 +261,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 prepare_for_logging=prepare_for_logging,
                 t_env=t_env,
                 collect_sequence_data=collect_sequence_data,
+                chosen_actions=batch["actions"][:, t],
             )
             outputs.append(agent_outs)
 
@@ -260,25 +299,42 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         ):
             return total, loss_dict
 
-        required_keys = (
-            "seq_counterfactual_local_policy",
-            "seq_counterfactual_attack_policy",
-            "seq_counterfactual_move_policy",
+        usegate_pred_keys = (
             "seq_counterfactual_attack_usegate_pred",
             "seq_counterfactual_move_usegate_pred",
         )
-        if any(key not in extra for key in required_keys):
+        if any(key not in extra for key in usegate_pred_keys):
             return total, loss_dict
 
-        local_policy = extra["seq_counterfactual_local_policy"]
-        attack_policy = extra["seq_counterfactual_attack_policy"]
-        move_policy = extra["seq_counterfactual_move_policy"]
+        logp_keys = (
+            "seq_counterfactual_local_logp",
+            "seq_counterfactual_attack_logp",
+            "seq_counterfactual_move_logp",
+        )
+        policy_keys = (
+            "seq_counterfactual_local_policy",
+            "seq_counterfactual_attack_policy",
+            "seq_counterfactual_move_policy",
+        )
+        has_logp = all(key in extra for key in logp_keys)
+        has_policy = all(key in extra for key in policy_keys)
+        if not has_logp and not has_policy:
+            return total, loss_dict
+
         attack_pred = extra["seq_counterfactual_attack_usegate_pred"].squeeze(-1)
         move_pred = extra["seq_counterfactual_move_usegate_pred"].squeeze(-1)
 
-        local_log_probs = self._get_action_log_probs(local_policy, actions)
-        attack_log_probs = self._get_action_log_probs(attack_policy, actions)
-        move_log_probs = self._get_action_log_probs(move_policy, actions)
+        if has_logp:
+            local_log_probs = extra["seq_counterfactual_local_logp"]
+            attack_log_probs = extra["seq_counterfactual_attack_logp"]
+            move_log_probs = extra["seq_counterfactual_move_logp"]
+        else:
+            local_policy = extra["seq_counterfactual_local_policy"]
+            attack_policy = extra["seq_counterfactual_attack_policy"]
+            move_policy = extra["seq_counterfactual_move_policy"]
+            local_log_probs = self._get_action_log_probs(local_policy, actions)
+            attack_log_probs = self._get_action_log_probs(attack_policy, actions)
+            move_log_probs = self._get_action_log_probs(move_policy, actions)
 
         action_ids = actions.squeeze(-1)
         semantic_action_offset = int(
@@ -293,16 +349,28 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
 
         attack_gain = advantages * (attack_log_probs - local_log_probs)
         move_gain = advantages * (move_log_probs - local_log_probs)
+        attack_gain_for_target = attack_gain
+        move_gain_for_target = move_gain
+        attack_gain_scale = attack_gain.new_tensor(1.0)
+        move_gain_scale = move_gain.new_tensor(1.0)
+
+        if self.counterfactual_usegate_gain_norm:
+            attack_gain_for_target, attack_gain_scale = self._normalize_usegate_gain(
+                attack_gain, attack_mask, stream_name="attack"
+            )
+            move_gain_for_target, move_gain_scale = self._normalize_usegate_gain(
+                move_gain, move_mask, stream_name="move"
+            )
 
         gain_temp = max(
             1e-6,
             float(getattr(self.args, "counterfactual_usegate_gain_temp", 0.1)),
         )
         attack_target = (
-            1.0 - th.exp(-F.relu(attack_gain.detach()) / gain_temp)
+            1.0 - th.exp(-F.relu(attack_gain_for_target.detach()) / gain_temp)
         )
         move_target = (
-            1.0 - th.exp(-F.relu(move_gain.detach()) / gain_temp)
+            1.0 - th.exp(-F.relu(move_gain_for_target.detach()) / gain_temp)
         )
 
         zero = batch["reward"].new_zeros(())
@@ -317,8 +385,17 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         # Usegate loss is applied only where gain > 0 (push gate open).
         # Sparsity handles the default-closed direction; applying loss toward
         # target=0 when gain<=0 would lock the gate shut against noisy baselines.
-        positive_attack_mask = (attack_gain.detach() > 0).float() * attack_mask
-        positive_move_mask = (move_gain.detach() > 0).float() * move_mask
+        if self.counterfactual_usegate_soft_weighting:
+            weight_temp = max(1e-6, self.counterfactual_usegate_weight_temp)
+            positive_attack_mask = (
+                th.sigmoid(attack_gain_for_target.detach() / weight_temp) * attack_mask
+            )
+            positive_move_mask = (
+                th.sigmoid(move_gain_for_target.detach() / weight_temp) * move_mask
+            )
+        else:
+            positive_attack_mask = (attack_gain_for_target.detach() > 0).float() * attack_mask
+            positive_move_mask = (move_gain_for_target.detach() > 0).float() * move_mask
 
         attack_weight = float(
             getattr(
@@ -398,8 +475,45 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         loss_dict["counterfactual_move_positive_ratio"] = (
             ((move_gain.detach() > 0).float() * move_mask).sum() / move_denom
         )
+        loss_dict["counterfactual_attack_gain_scale_ema"] = attack_gain_scale.detach()
+        loss_dict["counterfactual_move_gain_scale_ema"] = move_gain_scale.detach()
+        if self.counterfactual_usegate_soft_weighting:
+            loss_dict["counterfactual_attack_soft_weight_mean"] = (
+                positive_attack_mask.sum() / attack_denom
+            )
+            loss_dict["counterfactual_move_soft_weight_mean"] = (
+                positive_move_mask.sum() / move_denom
+            )
 
         return total, loss_dict
+
+    def _normalize_usegate_gain(self, gain, gain_mask, stream_name):
+        denom = gain_mask.sum().clamp(min=1.0)
+        current_abs_mean = ((gain.detach().abs() * gain_mask).sum() / denom).item()
+        decay = self.counterfactual_usegate_gain_norm_ema_decay
+        eps = self.counterfactual_usegate_gain_norm_eps
+
+        if stream_name == "attack":
+            prev_ema = self._attack_gain_abs_ema
+            next_ema = (
+                current_abs_mean
+                if prev_ema is None
+                else decay * prev_ema + (1.0 - decay) * current_abs_mean
+            )
+            self._attack_gain_abs_ema = next_ema
+        elif stream_name == "move":
+            prev_ema = self._move_gain_abs_ema
+            next_ema = (
+                current_abs_mean
+                if prev_ema is None
+                else decay * prev_ema + (1.0 - decay) * current_abs_mean
+            )
+            self._move_gain_abs_ema = next_ema
+        else:
+            raise ValueError("Unsupported stream_name '{}'".format(stream_name))
+
+        scale = max(eps, float(next_ema))
+        return gain / scale, gain.new_tensor(scale)
 
     def _build_active_masks(self, batch):
         avail_actions = batch["avail_actions"][:, :-1]

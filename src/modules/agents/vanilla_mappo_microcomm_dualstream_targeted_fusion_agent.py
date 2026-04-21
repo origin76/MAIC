@@ -77,6 +77,12 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.move_entropy_target_loss_weight = getattr(
             args, "move_entropy_target_loss_weight", 0.0
         )
+        self.move_entropy_upper_only = bool(
+            getattr(args, "move_entropy_upper_only", False)
+        )
+        self.move_attn_temperature = float(
+            getattr(args, "move_attn_temperature", 1.0)
+        )
         self.move_no_comm_target = getattr(args, "move_no_comm_target", None)
         self.move_no_comm_target_loss_weight = getattr(
             args, "move_no_comm_target_loss_weight", 0.0
@@ -119,6 +125,8 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             raise ValueError("move_readiness_entropy_high must be >= move_readiness_entropy_low")
         if self.move_readiness_no_comm_high < self.move_readiness_no_comm_low:
             raise ValueError("move_readiness_no_comm_high must be >= move_readiness_no_comm_low")
+        if self.move_attn_temperature <= 0:
+            raise ValueError("move_attn_temperature must be positive")
 
         if self.move_carrier_mode == "semantic_threat":
             self.move_sender_state_dim = len(self.move_self_feature_indices) + 4
@@ -313,9 +321,10 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             move_scores = th.cat([move_scores, move_null_scores], dim=2)
 
         attack_alpha = F.softmax(self._apply_topk_mask(attack_scores), dim=2)
-        move_alpha = F.softmax(
-            self._apply_topk_mask_with_k(move_scores, self.move_topk), dim=2
-        )
+        move_scores_masked = self._apply_topk_mask_with_k(move_scores, self.move_topk)
+        if self.move_attn_temperature != 1.0:
+            move_scores_masked = move_scores_masked / self.move_attn_temperature
+        move_alpha = F.softmax(move_scores_masked, dim=2)
         move_entropy = self._compute_mean_attention_entropy(move_alpha)
         if self.use_no_comm_token:
             move_no_comm_prob = move_alpha[:, :, -1, :].mean()
@@ -402,6 +411,8 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_delta = self.move_delta_head(
             move_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.semantic_action_offset)
+        move_delta_norm = move_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+        move_delta = move_delta / move_delta_norm
         fused_move_logits = (
             local_move_logits
             + (self.move_fusion_scale * move_comm_factor) * move_gate * move_delta
@@ -424,9 +435,14 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             if self.move_entropy_target_loss_weight > 0:
                 target_entropy = move_entropy.new_tensor(float(self.move_entropy_target))
                 move_entropy_gap = move_entropy - target_entropy
+                move_entropy_penalty = (
+                    move_entropy_gap.clamp(min=0.0)
+                    if self.move_entropy_upper_only
+                    else move_entropy_gap
+                )
                 returns["move_selective_entropy_loss"] = (
                     (self.move_entropy_target_loss_weight * move_comm_factor)
-                    * move_entropy_gap.pow(2)
+                    * move_entropy_penalty.pow(2)
                 )
             move_no_comm_gap = None
             if self.move_no_comm_target_loss_weight > 0:
@@ -443,30 +459,39 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 and kwargs.get("collect_sequence_data", False)
                 and step_warmup_factor > 0
             ):
-                local_policy = self._build_full_policy_probs(
-                    local_logits, avail_actions
-                ).detach()
-                counterfactual_attack_policy = self._build_full_policy_probs(
-                    th.cat(
+                chosen_actions = kwargs.get("chosen_actions", None)
+                with th.no_grad():
+                    attack_counterfactual_logits = th.cat(
                         [local_move_logits, counterfactual_attack_logits], dim=-1
-                    ),
-                    avail_actions,
-                ).detach()
-                counterfactual_move_policy = self._build_full_policy_probs(
-                    th.cat(
+                    )
+                    move_counterfactual_logits = th.cat(
                         [counterfactual_move_logits, local_attack_logits], dim=-1
-                    ),
-                    avail_actions,
-                ).detach()
-                returns[
-                    "seq_counterfactual_local_policy"
-                ] = local_policy
-                returns[
-                    "seq_counterfactual_attack_policy"
-                ] = counterfactual_attack_policy
-                returns[
-                    "seq_counterfactual_move_policy"
-                ] = counterfactual_move_policy
+                    )
+                    if chosen_actions is not None:
+                        returns["seq_counterfactual_local_logp"] = self._compute_chosen_log_probs(
+                            local_logits, avail_actions, chosen_actions
+                        )
+                        returns["seq_counterfactual_attack_logp"] = self._compute_chosen_log_probs(
+                            attack_counterfactual_logits, avail_actions, chosen_actions
+                        )
+                        returns["seq_counterfactual_move_logp"] = self._compute_chosen_log_probs(
+                            move_counterfactual_logits, avail_actions, chosen_actions
+                        )
+                    else:
+                        # Backward-compatible fallback for callers that don't pass chosen actions.
+                        returns[
+                            "seq_counterfactual_local_policy"
+                        ] = self._build_full_policy_probs(local_logits, avail_actions)
+                        returns[
+                            "seq_counterfactual_attack_policy"
+                        ] = self._build_full_policy_probs(
+                            attack_counterfactual_logits, avail_actions
+                        )
+                        returns[
+                            "seq_counterfactual_move_policy"
+                        ] = self._build_full_policy_probs(
+                            move_counterfactual_logits, avail_actions
+                        )
                 returns[
                     "seq_counterfactual_attack_usegate_pred"
                 ] = th.sigmoid(attack_gate_logits)
@@ -526,6 +551,20 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         policy = F.softmax(masked_logits, dim=-1)
         valid_mask = (avail_actions.sum(dim=-1, keepdim=True) > 0).float()
         return policy * valid_mask
+
+    def _compute_chosen_log_probs(self, logits, avail_actions, chosen_actions):
+        if chosen_actions.dim() == logits.dim() - 1:
+            chosen_actions = chosen_actions.unsqueeze(-1)
+
+        if avail_actions is None:
+            log_probs = F.log_softmax(logits, dim=-1)
+            return th.gather(log_probs, dim=-1, index=chosen_actions).squeeze(-1)
+
+        masked_logits = logits.masked_fill(avail_actions == 0, -1e10)
+        log_probs = F.log_softmax(masked_logits, dim=-1)
+        chosen_log_probs = th.gather(log_probs, dim=-1, index=chosen_actions).squeeze(-1)
+        valid_mask = (avail_actions.sum(dim=-1) > 0).float()
+        return chosen_log_probs * valid_mask
 
     def _extract_own_state_features(self, raw_obs, batch_size, device):
         own_feat_count = len(self.move_self_feature_indices)
@@ -781,6 +820,12 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             )
         logs["Scalar_targeted_move_entropy_target_loss_weight"] = th.tensor(
             float(self.move_entropy_target_loss_weight), device=move_alpha.device
+        )
+        logs["Scalar_targeted_move_entropy_upper_only"] = th.tensor(
+            1.0 if self.move_entropy_upper_only else 0.0, device=move_alpha.device
+        )
+        logs["Scalar_targeted_move_attn_temperature"] = th.tensor(
+            float(self.move_attn_temperature), device=move_alpha.device
         )
         if move_entropy_gap is not None:
             logs["Scalar_targeted_move_entropy_gap"] = move_entropy_gap.detach()
