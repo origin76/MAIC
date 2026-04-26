@@ -1,9 +1,8 @@
-# --- v7-IGG move-selective + softgain + robust ---
+# --- v7-IGG move-selective + softgain + robust G2 ---
 #
-# Robustness-first patch for seed sensitivity:
-#   1) IGG soft-weight supervision + gain EMA normalization (from softgain)
-#   2) Mild attack gate cap to avoid single-stream dominance
-#   3) Small regularization & variance control (weight decay + advantage clip + lower-variance GAE)
+# G2 = robust baseline + G1 core fix + stronger move gain floor
+#   1) Soft-weight denominator uses stream action count (not soft-mask sum)
+#   2) Move gain norm floor raised to improve weak-gain regime robustness
 
 action_selector: "multinomial"
 epsilon_start: 0.0
@@ -95,9 +94,12 @@ counterfactual_usegate_move_overpredict_weight: 0.02
 
 counterfactual_usegate_soft_weighting: True
 counterfactual_usegate_weight_temp: 0.2
+counterfactual_usegate_soft_weight_fixed_denom: True
 counterfactual_usegate_gain_norm: True
 counterfactual_usegate_gain_norm_ema_decay: 0.99
 counterfactual_usegate_gain_norm_eps: 0.001
+counterfactual_usegate_attack_gain_norm_eps: 0.001
+counterfactual_usegate_move_gain_norm_eps: 0.005
 
 critic_use_local_obs: True
 critic_use_last_action: True
@@ -145,4 +147,4 @@ init_load_critic: True
 init_load_value_norm: True
 init_test_nepisode: 0
 
-name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg_move_selective_softgain_robust"
+name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg_move_selective_softgain_robust_g2"

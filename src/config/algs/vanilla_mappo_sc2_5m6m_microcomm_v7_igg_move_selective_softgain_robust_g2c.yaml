@@ -1,9 +1,8 @@
-# --- v7-IGG move-selective + softgain + robust ---
+# --- v7-IGG move-selective + softgain + robust G2c ---
 #
-# Robustness-first patch for seed sensitivity:
-#   1) IGG soft-weight supervision + gain EMA normalization (from softgain)
-#   2) Mild attack gate cap to avoid single-stream dominance
-#   3) Small regularization & variance control (weight decay + advantage clip + lower-variance GAE)
+# G2c = G2b + late-stage move brake
+#   1) Keep G2b's useful move communication
+#   2) Prevent move stream from becoming always-on in later training
 
 action_selector: "multinomial"
 epsilon_start: 0.0
@@ -55,7 +54,7 @@ intent_mask_unavailable: True
 attack_fusion_scale: 0.1
 attack_gate_init_bias: -2.5
 attack_gate_floor: 0.02
-attack_gate_max: 0.35
+attack_gate_max: 0.28
 attack_gate_activation: "sigmoid"
 attack_gate_softplus_beta: 1.0
 attack_gate_scale: 1.0
@@ -69,7 +68,8 @@ move_ally_visible_index: 0
 move_ally_distance_index: 1
 move_fusion_scale: 0.06
 move_gate_init_bias: -3.0
-move_gate_floor: 0.05
+move_gate_floor: 0.04
+move_gate_max: 0.35
 move_gate_activation: "sigmoid"
 move_gate_softplus_beta: 1.0
 move_gate_scale: 1.0
@@ -82,22 +82,25 @@ move_entropy_target: 0.58
 move_entropy_upper_only: True
 move_entropy_target_loss_weight: 0.02
 move_no_comm_target: 0.65
-move_no_comm_target_loss_weight: 0.0
+move_no_comm_target_loss_weight: 0.01
 
 counterfactual_usegate: True
 counterfactual_usegate_gain_temp: 0.1
-counterfactual_usegate_attack_loss_weight: 0.04
-counterfactual_usegate_move_loss_weight: 0.06
+counterfactual_usegate_attack_loss_weight: 0.03
+counterfactual_usegate_move_loss_weight: 0.08
 counterfactual_usegate_attack_sparsity_weight: 0.003
 counterfactual_usegate_move_sparsity_weight: 0.0001
-counterfactual_usegate_attack_overpredict_weight: 0.0
+counterfactual_usegate_attack_overpredict_weight: 0.015
 counterfactual_usegate_move_overpredict_weight: 0.02
 
 counterfactual_usegate_soft_weighting: True
-counterfactual_usegate_weight_temp: 0.2
+counterfactual_usegate_weight_temp: 0.15
+counterfactual_usegate_soft_weight_fixed_denom: True
 counterfactual_usegate_gain_norm: True
 counterfactual_usegate_gain_norm_ema_decay: 0.99
 counterfactual_usegate_gain_norm_eps: 0.001
+counterfactual_usegate_attack_gain_norm_eps: 0.001
+counterfactual_usegate_move_gain_norm_eps: 0.002
 
 critic_use_local_obs: True
 critic_use_last_action: True
@@ -145,4 +148,4 @@ init_load_critic: True
 init_load_value_norm: True
 init_test_nepisode: 0
 
-name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg_move_selective_softgain_robust"
+name: "vanilla_mappo_sc2_5m6m_microcomm_v7_igg_move_selective_softgain_robust_g2c"

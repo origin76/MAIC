@@ -66,6 +66,18 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 getattr(args, "counterfactual_usegate_gain_temp", 0.1),
             )
         )
+        self.counterfactual_usegate_soft_weight_fixed_denom = bool(
+            getattr(args, "counterfactual_usegate_soft_weight_fixed_denom", False)
+        )
+        # Overpredict loss is a "close-gate" pressure. By default it applies on all
+        # samples, which can become too harsh when gains shrink late in training.
+        # These switches let us apply it only when gains are (confidently) negative.
+        self.counterfactual_usegate_overpredict_only_negative = bool(
+            getattr(args, "counterfactual_usegate_overpredict_only_negative", False)
+        )
+        self.counterfactual_usegate_overpredict_soft_weighting = bool(
+            getattr(args, "counterfactual_usegate_overpredict_soft_weighting", False)
+        )
         self.counterfactual_usegate_gain_norm = bool(
             getattr(args, "counterfactual_usegate_gain_norm", False)
         )
@@ -74,6 +86,20 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         )
         self.counterfactual_usegate_gain_norm_eps = float(
             getattr(args, "counterfactual_usegate_gain_norm_eps", 1e-6)
+        )
+        self.counterfactual_usegate_attack_gain_norm_eps = float(
+            getattr(
+                args,
+                "counterfactual_usegate_attack_gain_norm_eps",
+                self.counterfactual_usegate_gain_norm_eps,
+            )
+        )
+        self.counterfactual_usegate_move_gain_norm_eps = float(
+            getattr(
+                args,
+                "counterfactual_usegate_move_gain_norm_eps",
+                self.counterfactual_usegate_gain_norm_eps,
+            )
         )
         self._attack_gain_abs_ema = None
         self._move_gain_abs_ema = None
@@ -326,9 +352,11 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
 
         if has_logp:
             local_log_probs = extra["seq_counterfactual_local_logp"]
+            fused_log_probs = extra.get("seq_counterfactual_fused_logp", None)
             attack_log_probs = extra["seq_counterfactual_attack_logp"]
             move_log_probs = extra["seq_counterfactual_move_logp"]
         else:
+            fused_log_probs = None
             local_policy = extra["seq_counterfactual_local_policy"]
             attack_policy = extra["seq_counterfactual_attack_policy"]
             move_policy = extra["seq_counterfactual_move_policy"]
@@ -381,21 +409,50 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         attack_denom = attack_mask.sum().clamp(min=1.0)
         move_denom = move_mask.sum().clamp(min=1.0)
         full_denom = policy_mask.sum().clamp(min=1.0)
+        step_mask = (policy_mask.sum(dim=-1) > 0).float()
+        step_denom = step_mask.sum().clamp(min=1.0)
 
         # Usegate loss is applied only where gain > 0 (push gate open).
         # Sparsity handles the default-closed direction; applying loss toward
         # target=0 when gain<=0 would lock the gate shut against noisy baselines.
+        weight_temp = max(1e-6, self.counterfactual_usegate_weight_temp)
         if self.counterfactual_usegate_soft_weighting:
-            weight_temp = max(1e-6, self.counterfactual_usegate_weight_temp)
+            # Zero-baseline soft weighting:
+            #   old: sigmoid(x)        -> weight(0)=0.5
+            #   new: relu(2*sigmoid(x)-1) -> weight(0)=0
+            # This avoids a constant open-gate pressure when gain is near zero.
             positive_attack_mask = (
-                th.sigmoid(attack_gain_for_target.detach() / weight_temp) * attack_mask
+                F.relu(
+                    2.0 * th.sigmoid(attack_gain_for_target.detach() / weight_temp) - 1.0
+                )
+                * attack_mask
             )
             positive_move_mask = (
-                th.sigmoid(move_gain_for_target.detach() / weight_temp) * move_mask
+                F.relu(
+                    2.0 * th.sigmoid(move_gain_for_target.detach() / weight_temp) - 1.0
+                )
+                * move_mask
             )
         else:
             positive_attack_mask = (attack_gain_for_target.detach() > 0).float() * attack_mask
             positive_move_mask = (move_gain_for_target.detach() > 0).float() * move_mask
+
+        if self.counterfactual_usegate_overpredict_soft_weighting:
+            negative_attack_mask = (
+                F.relu(
+                    2.0 * th.sigmoid(-attack_gain_for_target.detach() / weight_temp) - 1.0
+                )
+                * attack_mask
+            )
+            negative_move_mask = (
+                F.relu(
+                    2.0 * th.sigmoid(-move_gain_for_target.detach() / weight_temp) - 1.0
+                )
+                * move_mask
+            )
+        else:
+            negative_attack_mask = (attack_gain_for_target.detach() < 0).float() * attack_mask
+            negative_move_mask = (move_gain_for_target.detach() < 0).float() * move_mask
 
         attack_weight = float(
             getattr(
@@ -425,16 +482,42 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 0.0,
             )
         )
+        attack_overpredict_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_attack_overpredict_weight",
+                0.0,
+            )
+        )
+        move_overpredict_weight = float(
+            getattr(
+                self.args,
+                "counterfactual_usegate_move_overpredict_weight",
+                0.0,
+            )
+        )
 
         if attack_weight > 0:
+            attack_loss_denom = positive_attack_mask.sum().clamp(min=1.0)
+            if (
+                self.counterfactual_usegate_soft_weighting
+                and self.counterfactual_usegate_soft_weight_fixed_denom
+            ):
+                attack_loss_denom = attack_denom
             attack_loss = attack_weight * (
                 ((attack_pred - attack_target).pow(2) * positive_attack_mask).sum()
-                / positive_attack_mask.sum().clamp(min=1.0)
+                / attack_loss_denom
             )
         if move_weight > 0:
+            move_loss_denom = positive_move_mask.sum().clamp(min=1.0)
+            if (
+                self.counterfactual_usegate_soft_weighting
+                and self.counterfactual_usegate_soft_weight_fixed_denom
+            ):
+                move_loss_denom = move_denom
             move_loss = move_weight * (
                 ((move_pred - move_target).pow(2) * positive_move_mask).sum()
-                / positive_move_mask.sum().clamp(min=1.0)
+                / move_loss_denom
             )
         if attack_sparse_weight > 0:
             sparsity_loss = sparsity_loss + attack_sparse_weight * (
@@ -445,10 +528,44 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 (move_pred * policy_mask).sum() / full_denom
             )
 
-        total = total + attack_loss + move_loss + sparsity_loss
+        attack_overpredict_loss = zero
+        move_overpredict_loss = zero
+        if attack_overpredict_weight > 0:
+            attack_overpredict_mask = (
+                negative_attack_mask
+                if self.counterfactual_usegate_overpredict_only_negative
+                else attack_mask
+            )
+            attack_overpredict_loss = attack_overpredict_weight * (
+                (F.relu(attack_pred - attack_target).pow(2) * attack_overpredict_mask).sum()
+                / attack_denom
+            )
+        if move_overpredict_weight > 0:
+            move_overpredict_mask = (
+                negative_move_mask
+                if self.counterfactual_usegate_overpredict_only_negative
+                else move_mask
+            )
+            move_overpredict_loss = move_overpredict_weight * (
+                (F.relu(move_pred - move_target).pow(2) * move_overpredict_mask).sum()
+                / move_denom
+            )
+
+        total = (
+            total
+            + attack_loss
+            + move_loss
+            + sparsity_loss
+            + attack_overpredict_loss
+            + move_overpredict_loss
+        )
 
         loss_dict["counterfactual_attack_usegate_loss"] = attack_loss.detach()
         loss_dict["counterfactual_move_usegate_loss"] = move_loss.detach()
+        if attack_overpredict_weight > 0:
+            loss_dict["counterfactual_attack_overpredict_loss"] = attack_overpredict_loss.detach()
+        if move_overpredict_weight > 0:
+            loss_dict["counterfactual_move_overpredict_loss"] = move_overpredict_loss.detach()
         if attack_sparse_weight > 0 or move_sparse_weight > 0:
             loss_dict["counterfactual_usegate_sparsity_loss"] = sparsity_loss.detach()
         loss_dict["counterfactual_attack_gain_mean"] = (
@@ -484,6 +601,126 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             loss_dict["counterfactual_move_soft_weight_mean"] = (
                 positive_move_mask.sum() / move_denom
             )
+        loss_dict["counterfactual_attack_overpredict_mean"] = (
+            (F.relu(attack_pred.detach() - attack_target) * attack_mask).sum()
+            / attack_denom
+        )
+        loss_dict["counterfactual_move_overpredict_mean"] = (
+            (F.relu(move_pred.detach() - move_target) * move_mask).sum()
+            / move_denom
+        )
+        if self.counterfactual_usegate_overpredict_soft_weighting:
+            loss_dict["counterfactual_attack_negative_soft_weight_mean"] = (
+                negative_attack_mask.sum() / attack_denom
+            )
+            loss_dict["counterfactual_move_negative_soft_weight_mean"] = (
+                negative_move_mask.sum() / move_denom
+            )
+
+        attack_logp_delta = (attack_log_probs - local_log_probs).detach()
+        move_logp_delta = (move_log_probs - local_log_probs).detach()
+        loss_dict["counterfactual_attack_logp_delta_mean"] = (
+            (attack_logp_delta * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_attack_logp_delta_abs_mean"] = (
+            (attack_logp_delta.abs() * attack_mask).sum() / attack_denom
+        )
+        loss_dict["counterfactual_move_logp_delta_mean"] = (
+            (move_logp_delta * move_mask).sum() / move_denom
+        )
+        loss_dict["counterfactual_move_logp_delta_abs_mean"] = (
+            (move_logp_delta.abs() * move_mask).sum() / move_denom
+        )
+        if fused_log_probs is not None:
+            fused_logp_delta = (fused_log_probs - local_log_probs).detach()
+            loss_dict["counterfactual_fused_logp_delta_mean"] = (
+                (fused_logp_delta * policy_mask).sum() / full_denom
+            )
+            loss_dict["counterfactual_fused_logp_delta_abs_mean"] = (
+                (fused_logp_delta.abs() * policy_mask).sum() / full_denom
+            )
+
+        action_flip_keys = (
+            ("seq_counterfactual_action_flip_fused", "counterfactual_action_flip_fused_rate"),
+            ("seq_counterfactual_action_flip_attack_only", "counterfactual_action_flip_attack_only_rate"),
+            ("seq_counterfactual_action_flip_move_only", "counterfactual_action_flip_move_only_rate"),
+        )
+        for seq_key, stat_key in action_flip_keys:
+            if seq_key in extra:
+                loss_dict[stat_key] = (
+                    (extra[seq_key].detach() * policy_mask).sum() / full_denom
+                )
+
+        attack_can_mask = extra.get("seq_counterfactual_attack_can_mask", None)
+        if attack_can_mask is not None:
+            attack_can_mask = attack_can_mask.detach().float() * policy_mask
+            attack_can_denom = attack_can_mask.sum().clamp(min=1.0)
+            loss_dict["counterfactual_attack_can_ratio"] = (
+                attack_can_mask.sum() / full_denom
+            )
+            target_flip_keys = (
+                (
+                    "seq_counterfactual_attack_target_flip",
+                    "counterfactual_attack_target_flip_rate",
+                ),
+                (
+                    "seq_counterfactual_attack_target_flip_attack_only",
+                    "counterfactual_attack_target_flip_attack_only_rate",
+                ),
+            )
+            for seq_key, stat_key in target_flip_keys:
+                if seq_key in extra:
+                    loss_dict[stat_key] = (
+                        (extra[seq_key].detach() * attack_can_mask).sum()
+                        / attack_can_denom
+                    )
+
+        attack_pair_valid = extra.get("seq_counterfactual_attack_pair_valid", None)
+        if attack_pair_valid is not None:
+            attack_pair_mask = attack_pair_valid.detach().float() * step_mask
+            attack_pair_denom = attack_pair_mask.sum().clamp(min=1.0)
+            loss_dict["counterfactual_attack_pair_valid_ratio"] = (
+                attack_pair_mask.sum() / step_denom
+            )
+            agreement_keys = (
+                (
+                    "seq_counterfactual_attack_target_agreement_local",
+                    "counterfactual_attack_target_agreement_local",
+                ),
+                (
+                    "seq_counterfactual_attack_target_agreement_fused",
+                    "counterfactual_attack_target_agreement_fused",
+                ),
+                (
+                    "seq_counterfactual_attack_target_agreement_attack_only",
+                    "counterfactual_attack_target_agreement_attack_only",
+                ),
+            )
+            agreement_values = {}
+            for seq_key, stat_key in agreement_keys:
+                if seq_key in extra:
+                    agreement_values[stat_key] = (
+                        (extra[seq_key].detach() * attack_pair_mask).sum()
+                        / attack_pair_denom
+                    )
+                    loss_dict[stat_key] = agreement_values[stat_key]
+            if (
+                "counterfactual_attack_target_agreement_local" in agreement_values
+                and "counterfactual_attack_target_agreement_fused" in agreement_values
+            ):
+                loss_dict["counterfactual_attack_target_agreement_gain_fused"] = (
+                    agreement_values["counterfactual_attack_target_agreement_fused"]
+                    - agreement_values["counterfactual_attack_target_agreement_local"]
+                )
+            if (
+                "counterfactual_attack_target_agreement_local" in agreement_values
+                and "counterfactual_attack_target_agreement_attack_only"
+                in agreement_values
+            ):
+                loss_dict["counterfactual_attack_target_agreement_gain_attack_only"] = (
+                    agreement_values["counterfactual_attack_target_agreement_attack_only"]
+                    - agreement_values["counterfactual_attack_target_agreement_local"]
+                )
 
         return total, loss_dict
 
@@ -491,7 +728,6 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         denom = gain_mask.sum().clamp(min=1.0)
         current_abs_mean = ((gain.detach().abs() * gain_mask).sum() / denom).item()
         decay = self.counterfactual_usegate_gain_norm_ema_decay
-        eps = self.counterfactual_usegate_gain_norm_eps
 
         if stream_name == "attack":
             prev_ema = self._attack_gain_abs_ema
@@ -501,6 +737,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 else decay * prev_ema + (1.0 - decay) * current_abs_mean
             )
             self._attack_gain_abs_ema = next_ema
+            eps = self.counterfactual_usegate_attack_gain_norm_eps
         elif stream_name == "move":
             prev_ema = self._move_gain_abs_ema
             next_ema = (
@@ -509,6 +746,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 else decay * prev_ema + (1.0 - decay) * current_abs_mean
             )
             self._move_gain_abs_ema = next_ema
+            eps = self.counterfactual_usegate_move_gain_norm_eps
         else:
             raise ValueError("Unsupported stream_name '{}'".format(stream_name))
 

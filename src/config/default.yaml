@@ -34,6 +34,40 @@ save_model_interval: 2000000 # Save models after this many timesteps
 checkpoint_path: "" # Load a checkpoint from this path
 init_checkpoint_path: "" # Initialize model weights from this checkpoint path without resuming training progress
 evaluate: False # Evaluate model for test_nepisode episodes and quit (no training)
+# Eval-only diagnostic: force communication fusion gates to 1.0 (if supported by the agent).
+eval_force_comm_gate_open: False
+# Eval-only diagnostic: force communication fusion gates to 0.0 (if supported by the agent).
+eval_force_comm_gate_closed: False
+# Eval-only diagnostic: forbid selecting the no-comm attention token (if supported by the agent).
+eval_disable_no_comm_token: False
+# Eval-only diagnostic: disable only the attack communication stream.
+eval_disable_attack_comm: False
+# Eval-only diagnostic: disable only the move communication stream.
+eval_disable_move_comm: False
+
+# Communication ablations/regularizers (optional, agent-specific).
+attack_no_comm_score_penalty: 0.0
+# Budget-aware "silence" constraint: treat selecting the no-comm token as
+# consuming a limited "silence budget". These are aliases for the legacy
+# *_no_comm_target knobs and keep Sacred CLI overrides from erroring.
+no_comm_budget: null
+no_comm_budget_loss_weight: null
+attack_no_comm_budget: null
+attack_no_comm_budget_loss_weight: null
+attack_no_comm_target: null
+attack_no_comm_target_loss_weight: 0.0
+
+move_no_comm_budget: null
+move_no_comm_budget_loss_weight: null
+move_no_comm_target: null
+move_no_comm_target_loss_weight: 0.0
+attack_attn_temperature: 1.0
+attack_attn_score_clip: null
+move_attn_score_clip: null
+
+# IGG / counterfactual usegate options (optional, learner-specific).
+counterfactual_usegate_overpredict_only_negative: False
+counterfactual_usegate_overpredict_soft_weighting: False
 load_step: 0 # Load model trained on this many timesteps (0 if choose max possible)
 init_load_step: 0 # Choose timestep from init_checkpoint_path (0 if choose max possible)
 init_load_strict: False # Whether initialization loading should require an exact state_dict match

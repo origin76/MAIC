@@ -80,19 +80,157 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.move_entropy_upper_only = bool(
             getattr(args, "move_entropy_upper_only", False)
         )
+        self.attack_attn_temperature = float(
+            getattr(args, "attack_attn_temperature", 1.0)
+        )
         self.move_attn_temperature = float(
             getattr(args, "move_attn_temperature", 1.0)
         )
+        self.attack_attn_score_clip = getattr(args, "attack_attn_score_clip", None)
+        self.move_attn_score_clip = getattr(args, "move_attn_score_clip", None)
         self.move_no_comm_target = getattr(args, "move_no_comm_target", None)
-        self.move_no_comm_target_loss_weight = getattr(
-            args, "move_no_comm_target_loss_weight", 0.0
+        self.move_no_comm_target_loss_weight = float(
+            getattr(args, "move_no_comm_target_loss_weight", 0.0)
         )
+        # Attack-stream no-comm control. Motivation: with top-k=1, the no-comm
+        # token can become an "easy escape hatch" (especially when real scores
+        # drift negative), causing the attack stream to abandon communication.
+        self.attack_no_comm_score_penalty = float(
+            getattr(args, "attack_no_comm_score_penalty", 0.0)
+        )
+        self.attack_no_comm_target = getattr(args, "attack_no_comm_target", None)
+        self.attack_no_comm_target_loss_weight = float(
+            getattr(args, "attack_no_comm_target_loss_weight", 0.0)
+        )
+
+        # Budget-aware alias: expose "silence budget" as an explicit knob.
+        # This is an implementation-level alias (no new mechanism), so we keep
+        # existing fields and just reconcile config values here.
+        no_comm_budget = getattr(args, "no_comm_budget", None)
+        no_comm_budget_loss_weight = getattr(args, "no_comm_budget_loss_weight", None)
+        attack_no_comm_budget = getattr(args, "attack_no_comm_budget", None)
+        attack_no_comm_budget_loss_weight = getattr(
+            args, "attack_no_comm_budget_loss_weight", None
+        )
+        move_no_comm_budget = getattr(args, "move_no_comm_budget", None)
+        move_no_comm_budget_loss_weight = getattr(
+            args, "move_no_comm_budget_loss_weight", None
+        )
+
+        if (
+            attack_no_comm_budget is not None
+            and self.attack_no_comm_target is not None
+            and float(attack_no_comm_budget) != float(self.attack_no_comm_target)
+        ):
+            raise ValueError(
+                "attack_no_comm_budget ({}) conflicts with attack_no_comm_target ({})".format(
+                    attack_no_comm_budget, self.attack_no_comm_target
+                )
+            )
+        if attack_no_comm_budget is None:
+            attack_no_comm_budget = self.attack_no_comm_target
+        if attack_no_comm_budget is None:
+            attack_no_comm_budget = no_comm_budget
+        self.attack_no_comm_target = attack_no_comm_budget
+
+        if (
+            attack_no_comm_budget_loss_weight is not None
+            and self.attack_no_comm_target_loss_weight > 0
+            and float(attack_no_comm_budget_loss_weight)
+            != float(self.attack_no_comm_target_loss_weight)
+        ):
+            raise ValueError(
+                "attack_no_comm_budget_loss_weight ({}) conflicts with attack_no_comm_target_loss_weight ({})".format(
+                    attack_no_comm_budget_loss_weight,
+                    self.attack_no_comm_target_loss_weight,
+                )
+            )
+        if attack_no_comm_budget_loss_weight is None:
+            attack_no_comm_budget_loss_weight = self.attack_no_comm_target_loss_weight
+        if (
+            float(attack_no_comm_budget_loss_weight) == 0.0
+            and no_comm_budget_loss_weight is not None
+        ):
+            attack_no_comm_budget_loss_weight = float(no_comm_budget_loss_weight)
+        self.attack_no_comm_target_loss_weight = float(
+            attack_no_comm_budget_loss_weight
+        )
+
+        if (
+            move_no_comm_budget is not None
+            and self.move_no_comm_target is not None
+            and float(move_no_comm_budget) != float(self.move_no_comm_target)
+        ):
+            raise ValueError(
+                "move_no_comm_budget ({}) conflicts with move_no_comm_target ({})".format(
+                    move_no_comm_budget, self.move_no_comm_target
+                )
+            )
+        if move_no_comm_budget is None:
+            move_no_comm_budget = self.move_no_comm_target
+        if move_no_comm_budget is None:
+            move_no_comm_budget = no_comm_budget
+        self.move_no_comm_target = move_no_comm_budget
+
+        if (
+            move_no_comm_budget_loss_weight is not None
+            and self.move_no_comm_target_loss_weight > 0
+            and float(move_no_comm_budget_loss_weight)
+            != float(self.move_no_comm_target_loss_weight)
+        ):
+            raise ValueError(
+                "move_no_comm_budget_loss_weight ({}) conflicts with move_no_comm_target_loss_weight ({})".format(
+                    move_no_comm_budget_loss_weight,
+                    self.move_no_comm_target_loss_weight,
+                )
+            )
+        if move_no_comm_budget_loss_weight is None:
+            move_no_comm_budget_loss_weight = self.move_no_comm_target_loss_weight
+        if (
+            float(move_no_comm_budget_loss_weight) == 0.0
+            and no_comm_budget_loss_weight is not None
+        ):
+            move_no_comm_budget_loss_weight = float(no_comm_budget_loss_weight)
+        self.move_no_comm_target_loss_weight = float(move_no_comm_budget_loss_weight)
         self.move_self_feature_indices = list(
             getattr(args, "move_self_feature_indices", [0])
         )
         self.counterfactual_usegate = bool(
             getattr(args, "counterfactual_usegate", False)
         )
+        # Eval-only diagnostic: when enabled, force both fusion gates to 1.0 in
+        # `test_mode` to check whether comm features are useful but suppressed.
+        self.eval_force_comm_gate_open = bool(
+            getattr(args, "eval_force_comm_gate_open", False)
+        )
+        # Eval-only diagnostic: when enabled, force both fusion gates to 0.0 in
+        # `test_mode` (i.e., no comm influence on logits) as a clean ablation.
+        self.eval_force_comm_gate_closed = bool(
+            getattr(args, "eval_force_comm_gate_closed", False)
+        )
+        # Eval-only diagnostic: when enabled, disallow selecting the no-comm token
+        # in attention (forces communication to always come from real teammates).
+        self.eval_disable_no_comm_token = bool(
+            getattr(args, "eval_disable_no_comm_token", False)
+        )
+        # Eval-only diagnostic: disable one stream at a time to isolate causal
+        # effect without changing the training graph.
+        self.eval_disable_attack_comm = bool(
+            getattr(args, "eval_disable_attack_comm", False)
+        )
+        self.eval_disable_move_comm = bool(
+            getattr(args, "eval_disable_move_comm", False)
+        )
+        if self.eval_force_comm_gate_open and self.eval_force_comm_gate_closed:
+            raise ValueError(
+                "eval_force_comm_gate_open and eval_force_comm_gate_closed cannot both be True"
+            )
+        if self.eval_force_comm_gate_open and (
+            self.eval_disable_attack_comm or self.eval_disable_move_comm
+        ):
+            raise ValueError(
+                "eval_force_comm_gate_open conflicts with eval_disable_attack_comm/eval_disable_move_comm"
+            )
 
         if len(self.move_self_feature_indices) == 0:
             raise ValueError("move_self_feature_indices must be non-empty")
@@ -113,6 +251,23 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             raise ValueError(
                 "move_no_comm_target_loss_weight requires use_no_comm_token=True"
             )
+        if self.attack_no_comm_score_penalty < 0.0:
+            raise ValueError("attack_no_comm_score_penalty must be non-negative")
+        if (
+            self.attack_no_comm_target_loss_weight > 0
+            and self.attack_no_comm_target is None
+        ):
+            raise ValueError(
+                "attack_no_comm_target must be set when attack_no_comm_target_loss_weight > 0"
+            )
+        if self.attack_no_comm_target_loss_weight > 0 and not self.use_no_comm_token:
+            raise ValueError(
+                "attack_no_comm_target_loss_weight requires use_no_comm_token=True"
+            )
+        if self.attack_no_comm_score_penalty > 0 and not self.use_no_comm_token:
+            raise ValueError(
+                "attack_no_comm_score_penalty requires use_no_comm_token=True"
+            )
         if self.move_carrier_mode not in {"default", "semantic_threat"}:
             raise ValueError(
                 "Unsupported move_carrier_mode '{}'".format(
@@ -127,6 +282,18 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             raise ValueError("move_readiness_no_comm_high must be >= move_readiness_no_comm_low")
         if self.move_attn_temperature <= 0:
             raise ValueError("move_attn_temperature must be positive")
+        if self.attack_attn_temperature <= 0:
+            raise ValueError("attack_attn_temperature must be positive")
+        if (
+            self.attack_attn_score_clip is not None
+            and float(self.attack_attn_score_clip) <= 0
+        ):
+            raise ValueError("attack_attn_score_clip must be positive when set")
+        if (
+            self.move_attn_score_clip is not None
+            and float(self.move_attn_score_clip) <= 0
+        ):
+            raise ValueError("move_attn_score_clip must be positive when set")
 
         if self.move_carrier_mode == "semantic_threat":
             self.move_sender_state_dim = len(self.move_self_feature_indices) + 4
@@ -283,6 +450,9 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         attack_scores = (queries.unsqueeze(2) * pair_keys).sum(dim=-1) / (
             self.head_dim ** 0.5
         )
+        if self.attack_attn_score_clip is not None:
+            clip_value = float(self.attack_attn_score_clip)
+            attack_scores = attack_scores.clamp(min=-clip_value, max=clip_value)
 
         move_queries = self.move_query_proj(comm_source).reshape(
             bs, self.n_agents, self.attention_heads, self.head_dim
@@ -293,6 +463,9 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_scores = (move_queries.unsqueeze(2) * move_pair_keys).sum(dim=-1) / (
             self.head_dim ** 0.5
         )
+        if self.move_attn_score_clip is not None:
+            clip_value = float(self.move_attn_score_clip)
+            move_scores = move_scores.clamp(min=-clip_value, max=clip_value)
 
         self_mask = th.eye(
             self.n_agents, device=agent_hidden.device, dtype=th.bool
@@ -309,18 +482,53 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             ].unsqueeze(-1)
             move_scores = move_scores - self.move_distance_penalty_coef * distance_penalty
 
+        disable_null_token = (
+            test_mode and self.eval_disable_no_comm_token and self.use_no_comm_token
+        )
+
         if self.use_no_comm_token:
             attack_null_scores = (queries.unsqueeze(2) * self.null_key).sum(dim=-1) / (
                 self.head_dim ** 0.5
             )
+            # Penalize selecting the no-comm token when the agent can actually
+            # attack (i.e., communication about "who to focus" should be used).
+            # This is a minimal, purely forward-pass prior that helps prevent
+            # late-stage collapse where the attack stream abandons comm by
+            # routing to the no-comm token too often.
+            if self.attack_no_comm_score_penalty > 0:
+                attack_null_scores = (
+                    attack_null_scores
+                    - self.attack_no_comm_score_penalty * can_attack.unsqueeze(2)
+                )
+            if self.attack_attn_score_clip is not None:
+                clip_value = float(self.attack_attn_score_clip)
+                attack_null_scores = attack_null_scores.clamp(
+                    min=-clip_value, max=clip_value
+                )
+            if disable_null_token:
+                attack_null_scores = attack_null_scores.new_full(
+                    attack_null_scores.shape, -1e10
+                )
             attack_scores = th.cat([attack_scores, attack_null_scores], dim=2)
 
             move_null_scores = (
                 move_queries.unsqueeze(2) * self.move_null_key
             ).sum(dim=-1) / (self.head_dim ** 0.5)
+            if self.move_attn_score_clip is not None:
+                clip_value = float(self.move_attn_score_clip)
+                move_null_scores = move_null_scores.clamp(
+                    min=-clip_value, max=clip_value
+                )
+            if disable_null_token:
+                move_null_scores = move_null_scores.new_full(
+                    move_null_scores.shape, -1e10
+                )
             move_scores = th.cat([move_scores, move_null_scores], dim=2)
 
-        attack_alpha = F.softmax(self._apply_topk_mask(attack_scores), dim=2)
+        attack_scores_masked = self._apply_topk_mask(attack_scores)
+        if self.attack_attn_temperature != 1.0:
+            attack_scores_masked = attack_scores_masked / self.attack_attn_temperature
+        attack_alpha = F.softmax(attack_scores_masked, dim=2)
         move_scores_masked = self._apply_topk_mask_with_k(move_scores, self.move_topk)
         if self.move_attn_temperature != 1.0:
             move_scores_masked = move_scores_masked / self.move_attn_temperature
@@ -384,6 +592,11 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             softplus_beta=self.attack_gate_softplus_beta,
             max_value=self.attack_gate_max,
         )
+        if test_mode:
+            if self.eval_force_comm_gate_open:
+                attack_gate = th.ones_like(attack_gate)
+            elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
+                attack_gate = th.zeros_like(attack_gate)
         attack_delta = self.attack_delta_head(
             attack_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.attack_action_dim)
@@ -408,6 +621,11 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             softplus_beta=self.move_gate_softplus_beta,
             max_value=self.move_gate_max,
         )
+        if test_mode:
+            if self.eval_force_comm_gate_open:
+                move_gate = th.ones_like(move_gate)
+            elif self.eval_force_comm_gate_closed or self.eval_disable_move_comm:
+                move_gate = th.zeros_like(move_gate)
         move_delta = self.move_delta_head(
             move_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.semantic_action_offset)
@@ -431,6 +649,27 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 returns["attention_entropy_loss"] = (
                     0.5 * (attack_entropy + move_entropy)
                 ) * self.attention_entropy_loss_weight
+            attack_no_comm_gap = None
+            if self.attack_no_comm_target_loss_weight > 0:
+                if self.use_no_comm_token:
+                    # Only penalize no-comm when the agent can attack (otherwise,
+                    # no-comm is expected and shouldn't be discouraged).
+                    attack_no_comm_prob = attack_alpha[:, :, -1, :].mean(dim=-1)
+                    attack_can = can_attack.squeeze(-1)
+                    denom = attack_can.sum().clamp(min=1.0)
+                    attack_no_comm_prob_active = (
+                        (attack_no_comm_prob * attack_can).sum() / denom
+                    )
+                else:
+                    attack_no_comm_prob_active = attack_alpha.new_zeros(())
+                target_no_comm = attack_no_comm_prob_active.new_tensor(
+                    float(self.attack_no_comm_target)
+                )
+                attack_no_comm_gap = attack_no_comm_prob_active - target_no_comm
+                returns["attack_no_comm_loss"] = (
+                    (self.attack_no_comm_target_loss_weight * step_warmup_factor)
+                    * attack_no_comm_gap.clamp(min=0.0).pow(2)
+                )
             move_entropy_gap = None
             if self.move_entropy_target_loss_weight > 0:
                 target_entropy = move_entropy.new_tensor(float(self.move_entropy_target))
@@ -450,9 +689,13 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     float(self.move_no_comm_target)
                 )
                 move_no_comm_gap = move_no_comm_prob - target_no_comm
+                # Penalise in both directions: too little OR too much silence.
+                # Prior code only clamped min=0 (punish when gap > 0, i.e.
+                # no_comm > target).  When the stream under-uses silence
+                # (gap < 0) the squared penalty still applies.
                 returns["move_no_comm_loss"] = (
                     (self.move_no_comm_target_loss_weight * move_comm_factor)
-                    * move_no_comm_gap.clamp(min=0.0).pow(2)
+                    * move_no_comm_gap.pow(2)
                 )
             if (
                 self.counterfactual_usegate
@@ -467,9 +710,45 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     move_counterfactual_logits = th.cat(
                         [counterfactual_move_logits, local_attack_logits], dim=-1
                     )
+                    local_action_top1, _ = self._masked_argmax(
+                        local_logits, avail_actions
+                    )
+                    fused_action_top1, _ = self._masked_argmax(
+                        final_logits, avail_actions
+                    )
+                    attack_only_action_top1, _ = self._masked_argmax(
+                        attack_counterfactual_logits, avail_actions
+                    )
+                    move_only_action_top1, _ = self._masked_argmax(
+                        move_counterfactual_logits, avail_actions
+                    )
+                    local_attack_top1, attack_can_mask = self._masked_argmax(
+                        local_attack_logits, attack_avail_actions
+                    )
+                    fused_attack_top1, _ = self._masked_argmax(
+                        fused_attack_logits, attack_avail_actions
+                    )
+                    attack_only_top1, _ = self._masked_argmax(
+                        counterfactual_attack_logits, attack_avail_actions
+                    )
+                    (
+                        local_attack_agreement,
+                        attack_pair_valid,
+                    ) = self._compute_pairwise_agreement(
+                        local_attack_top1, attack_can_mask
+                    )
+                    fused_attack_agreement, _ = self._compute_pairwise_agreement(
+                        fused_attack_top1, attack_can_mask
+                    )
+                    attack_only_agreement, _ = self._compute_pairwise_agreement(
+                        attack_only_top1, attack_can_mask
+                    )
                     if chosen_actions is not None:
                         returns["seq_counterfactual_local_logp"] = self._compute_chosen_log_probs(
                             local_logits, avail_actions, chosen_actions
+                        )
+                        returns["seq_counterfactual_fused_logp"] = self._compute_chosen_log_probs(
+                            final_logits, avail_actions, chosen_actions
                         )
                         returns["seq_counterfactual_attack_logp"] = self._compute_chosen_log_probs(
                             attack_counterfactual_logits, avail_actions, chosen_actions
@@ -492,6 +771,33 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                         ] = self._build_full_policy_probs(
                             move_counterfactual_logits, avail_actions
                         )
+                returns["seq_counterfactual_action_flip_fused"] = (
+                    local_action_top1 != fused_action_top1
+                ).float()
+                returns["seq_counterfactual_action_flip_attack_only"] = (
+                    local_action_top1 != attack_only_action_top1
+                ).float()
+                returns["seq_counterfactual_action_flip_move_only"] = (
+                    local_action_top1 != move_only_action_top1
+                ).float()
+                returns["seq_counterfactual_attack_can_mask"] = attack_can_mask
+                returns["seq_counterfactual_attack_pair_valid"] = attack_pair_valid
+                returns["seq_counterfactual_attack_target_flip"] = (
+                    (local_attack_top1 != fused_attack_top1).float() * attack_can_mask
+                )
+                returns["seq_counterfactual_attack_target_flip_attack_only"] = (
+                    (local_attack_top1 != attack_only_top1).float()
+                    * attack_can_mask
+                )
+                returns["seq_counterfactual_attack_target_agreement_local"] = (
+                    local_attack_agreement
+                )
+                returns["seq_counterfactual_attack_target_agreement_fused"] = (
+                    fused_attack_agreement
+                )
+                returns["seq_counterfactual_attack_target_agreement_attack_only"] = (
+                    attack_only_agreement
+                )
                 returns[
                     "seq_counterfactual_attack_usegate_pred"
                 ] = th.sigmoid(attack_gate_logits)
@@ -520,6 +826,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     move_ally_support=move_ally_support,
                     move_retreat_urgency=move_retreat_urgency,
                     move_engage_readiness=move_engage_readiness,
+                    attack_no_comm_gap=attack_no_comm_gap,
                     step_warmup_factor=step_warmup_factor,
                     move_readiness_factor=move_readiness_factor,
                     move_entropy_ready=move_entropy_ready,
@@ -565,6 +872,35 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         chosen_log_probs = th.gather(log_probs, dim=-1, index=chosen_actions).squeeze(-1)
         valid_mask = (avail_actions.sum(dim=-1) > 0).float()
         return chosen_log_probs * valid_mask
+
+    def _masked_argmax(self, logits, avail_actions):
+        if avail_actions is None:
+            top_idx = logits.argmax(dim=-1)
+            valid_mask = top_idx.new_ones(top_idx.shape, dtype=logits.dtype)
+            return top_idx, valid_mask
+
+        masked_logits = logits.masked_fill(avail_actions == 0, -1e10)
+        top_idx = masked_logits.argmax(dim=-1)
+        valid_mask = (avail_actions.sum(dim=-1) > 0).float()
+        return top_idx, valid_mask
+
+    def _compute_pairwise_agreement(self, top_idx, valid_mask):
+        pair_valid = valid_mask.unsqueeze(-1) * valid_mask.unsqueeze(-2)
+        eye = th.eye(
+            top_idx.size(-1), device=top_idx.device, dtype=pair_valid.dtype
+        ).unsqueeze(0)
+        pair_valid = pair_valid * (1.0 - eye)
+        same_target = (
+            (top_idx.unsqueeze(-1) == top_idx.unsqueeze(-2)).float() * pair_valid
+        )
+        pair_denom = pair_valid.sum(dim=(-1, -2))
+        agreement = th.where(
+            pair_denom > 0,
+            same_target.sum(dim=(-1, -2)) / pair_denom.clamp(min=1.0),
+            pair_denom.new_zeros(pair_denom.shape),
+        )
+        pair_valid_flag = (pair_denom > 0).float()
+        return agreement, pair_valid_flag
 
     def _extract_own_state_features(self, raw_obs, batch_size, device):
         own_feat_count = len(self.move_self_feature_indices)
@@ -752,6 +1088,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         own_state_features,
         move_entropy_gap=None,
         move_no_comm_gap=None,
+        attack_no_comm_gap=None,
         move_enemy_pressure=None,
         move_ally_support=None,
         move_retreat_urgency=None,
@@ -792,6 +1129,24 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             if self.use_no_comm_token
             else th.tensor(0.0, device=attack_alpha.device)
         )
+        if self.attack_no_comm_target is not None:
+            logs["Scalar_targeted_attack_no_comm_target"] = th.tensor(
+                float(self.attack_no_comm_target), device=attack_alpha.device
+            )
+            logs["Scalar_targeted_attack_no_comm_budget"] = th.tensor(
+                float(self.attack_no_comm_target), device=attack_alpha.device
+            )
+        logs["Scalar_targeted_attack_no_comm_target_loss_weight"] = th.tensor(
+            float(self.attack_no_comm_target_loss_weight), device=attack_alpha.device
+        )
+        logs["Scalar_targeted_attack_no_comm_budget_loss_weight"] = th.tensor(
+            float(self.attack_no_comm_target_loss_weight), device=attack_alpha.device
+        )
+        logs["Scalar_targeted_attack_no_comm_score_penalty"] = th.tensor(
+            float(self.attack_no_comm_score_penalty), device=attack_alpha.device
+        )
+        if attack_no_comm_gap is not None:
+            logs["Scalar_targeted_attack_no_comm_gap"] = attack_no_comm_gap.detach()
         logs["Scalar_targeted_attack_intent_top1_mass"] = attack_probs.detach().max(dim=-1)[0].mean()
         logs["Scalar_targeted_attack_edge_budget_ratio"] = th.tensor(
             float(min(max(1, self.topk), attack_alpha.size(2))) / float(attack_alpha.size(2)),
@@ -827,13 +1182,30 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         logs["Scalar_targeted_move_attn_temperature"] = th.tensor(
             float(self.move_attn_temperature), device=move_alpha.device
         )
+        logs["Scalar_targeted_attack_attn_temperature"] = th.tensor(
+            float(self.attack_attn_temperature), device=attack_alpha.device
+        )
+        if self.attack_attn_score_clip is not None:
+            logs["Scalar_targeted_attack_attn_score_clip"] = th.tensor(
+                float(self.attack_attn_score_clip), device=attack_alpha.device
+            )
+        if self.move_attn_score_clip is not None:
+            logs["Scalar_targeted_move_attn_score_clip"] = th.tensor(
+                float(self.move_attn_score_clip), device=move_alpha.device
+            )
         if move_entropy_gap is not None:
             logs["Scalar_targeted_move_entropy_gap"] = move_entropy_gap.detach()
         if self.move_no_comm_target is not None:
             logs["Scalar_targeted_move_no_comm_target"] = th.tensor(
                 float(self.move_no_comm_target), device=move_alpha.device
             )
+            logs["Scalar_targeted_move_no_comm_budget"] = th.tensor(
+                float(self.move_no_comm_target), device=move_alpha.device
+            )
         logs["Scalar_targeted_move_no_comm_target_loss_weight"] = th.tensor(
+            float(self.move_no_comm_target_loss_weight), device=move_alpha.device
+        )
+        logs["Scalar_targeted_move_no_comm_budget_loss_weight"] = th.tensor(
             float(self.move_no_comm_target_loss_weight), device=move_alpha.device
         )
         if move_no_comm_gap is not None:
