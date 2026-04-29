@@ -34,6 +34,12 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.move_gate_scale = getattr(args, "move_gate_scale", 1.0)
         self.attack_gate_max = getattr(args, "attack_gate_max", None)
         self.move_gate_max = getattr(args, "move_gate_max", None)
+        self.gate_fixed_value = getattr(args, "gate_fixed_value", None)
+        self.gate_anneal_enabled = bool(getattr(args, "gate_anneal_enabled", False))
+        self.gate_anneal_start_value = float(getattr(args, "gate_anneal_start_value", 0.5))
+        self.gate_anneal_end_value = float(getattr(args, "gate_anneal_end_value", 0.1))
+        self.gate_anneal_start_step = int(getattr(args, "gate_anneal_start_step", 200000))
+        self.gate_anneal_steps = int(getattr(args, "gate_anneal_steps", 600000))
         self.move_distance_penalty_coef = getattr(
             args, "move_distance_penalty_coef", 0.0
         )
@@ -49,6 +55,9 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         )
         self.comm_warmup_end_factor = float(
             getattr(args, "comm_warmup_end_factor", 1.0)
+        )
+        self.comm_warmup_exponent = float(
+            getattr(args, "comm_warmup_exponent", 1.0)
         )
         self.move_readiness_warmup = bool(
             getattr(args, "move_readiness_warmup", False)
@@ -597,9 +606,16 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 attack_gate = th.ones_like(attack_gate)
             elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
                 attack_gate = th.zeros_like(attack_gate)
+        if self.gate_anneal_enabled:
+            scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+            attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
+        elif self.gate_fixed_value is not None:
+            attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
         attack_delta = self.attack_delta_head(
             attack_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.attack_action_dim)
+        attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+        attack_delta = attack_delta / attack_delta_norm
         fused_attack_logits = (
             local_attack_logits
             + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
@@ -626,6 +642,11 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 move_gate = th.ones_like(move_gate)
             elif self.eval_force_comm_gate_closed or self.eval_disable_move_comm:
                 move_gate = th.zeros_like(move_gate)
+        if self.gate_anneal_enabled:
+            scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+            move_gate = move_gate.new_full(move_gate.shape, scheduled_gate)
+        elif self.gate_fixed_value is not None:
+            move_gate = move_gate.new_full(move_gate.shape, self.gate_fixed_value)
         move_delta = self.move_delta_head(
             move_fusion_input.reshape(bs * self.n_agents, -1)
         ).reshape(bs, self.n_agents, self.semantic_action_offset)
@@ -974,9 +995,22 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 max(0.0, min(1.0, shifted_t / float(self.comm_warmup_steps)))
             )
 
+        nonlinear_progress = progress ** self.comm_warmup_exponent
         return (
             self.comm_warmup_start_factor
-            + (self.comm_warmup_end_factor - self.comm_warmup_start_factor) * progress
+            + (self.comm_warmup_end_factor - self.comm_warmup_start_factor) * nonlinear_progress
+        )
+
+    def _compute_gate_anneal_value(self, t_env):
+        if not self.gate_anneal_enabled or t_env is None:
+            return self.gate_anneal_start_value
+        start_step = self.gate_anneal_start_step
+        if t_env < start_step:
+            return self.gate_anneal_start_value
+        progress = min(1.0, (t_env - start_step) / max(1, self.gate_anneal_steps))
+        return (
+            self.gate_anneal_start_value
+            + (self.gate_anneal_end_value - self.gate_anneal_start_value) * progress
         )
 
     def _compute_move_readiness_factor(self, move_entropy, move_no_comm_prob):

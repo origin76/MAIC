@@ -104,6 +104,13 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         self._attack_gain_abs_ema = None
         self._move_gain_abs_ema = None
 
+        self.comm_warmup_steps = int(getattr(args, "comm_warmup_steps", 0))
+        self.comm_warmup_delay_steps = int(getattr(args, "comm_warmup_delay_steps", 0))
+        self.comm_warmup_start_factor = float(getattr(args, "comm_warmup_start_factor", 1.0))
+        self.comm_warmup_end_factor = float(getattr(args, "comm_warmup_end_factor", 1.0))
+        self.comm_warmup_exponent = float(getattr(args, "comm_warmup_exponent", 1.0))
+        self._t_env = 0
+
         self.value_normalizer = ValueNorm(1, device="cpu") if self.use_valuenorm else None
         self.log_stats_t = -self.args.learner_log_interval - 1
 
@@ -118,6 +125,7 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         }]
 
     def train(self, batch, t_env: int, episode_num: int):
+        self._t_env = t_env
         if self.use_linear_lr_decay:
             self._update_learning_rate(t_env)
 
@@ -497,6 +505,12 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             )
         )
 
+        warmup_scale = self._compute_comm_warmup_factor()
+        if warmup_scale < 1.0:
+            attack_weight *= warmup_scale
+            move_weight *= warmup_scale
+            # sparsity and overpredict NOT scaled: closing pressure active from day 1
+
         if attack_weight > 0:
             attack_loss_denom = positive_attack_mask.sum().clamp(min=1.0)
             if (
@@ -819,6 +833,18 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
             param_group["lr"] = initial_lr * actor_decay
         for param_group in self.critic_optimiser.param_groups:
             param_group["lr"] = critic_lr
+
+    def _compute_comm_warmup_factor(self):
+        if self.comm_warmup_steps <= 0:
+            return 1.0
+        delay_steps = max(0, self.comm_warmup_delay_steps)
+        shifted_t = float(self._t_env) - float(delay_steps)
+        progress = float(max(0.0, min(1.0, shifted_t / float(self.comm_warmup_steps))))
+        nonlinear_progress = progress ** self.comm_warmup_exponent
+        return (
+            self.comm_warmup_start_factor
+            + (self.comm_warmup_end_factor - self.comm_warmup_start_factor) * nonlinear_progress
+        )
 
     def _get_actor_lr_for_group(self, group_name, default_index=0):
         for idx, param_group in enumerate(self.actor_optimiser.param_groups):

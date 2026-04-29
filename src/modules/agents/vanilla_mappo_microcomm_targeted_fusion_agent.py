@@ -163,6 +163,8 @@ class VanillaMAPPOMicroCommTargetedFusionAgent(nn.Module):
         raw_attack_gate = th.sigmoid(self.attack_gate(fusion_input.reshape(bs * self.n_agents, -1))).reshape(bs, self.n_agents, 1)
         attack_gate = self.attack_gate_floor + (1.0 - self.attack_gate_floor) * raw_attack_gate
         attack_delta = self.attack_delta_head(fusion_input.reshape(bs * self.n_agents, -1)).reshape(bs, self.n_agents, self.attack_action_dim)
+        attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+        attack_delta = attack_delta / attack_delta_norm
         fused_attack_logits = local_attack_logits + self.attack_fusion_scale * attack_gate * attack_delta
 
         final_logits = th.cat([local_base_logits, fused_attack_logits], dim=-1)
