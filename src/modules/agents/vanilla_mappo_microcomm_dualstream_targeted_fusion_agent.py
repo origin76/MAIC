@@ -40,6 +40,11 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.gate_anneal_end_value = float(getattr(args, "gate_anneal_end_value", 0.1))
         self.gate_anneal_start_step = int(getattr(args, "gate_anneal_start_step", 200000))
         self.gate_anneal_steps = int(getattr(args, "gate_anneal_steps", 600000))
+        self.fusion_mode = getattr(args, "fusion_mode", "logit")
+        if self.fusion_mode == "hidden":
+            attack_msg_dim = self.topk * self.comm_value_dim
+            self.hidden_fusion_head = nn.Linear(attack_msg_dim, args.rnn_hidden_dim)
+            self._hidden_fusion_logs = {}
         self.move_distance_penalty_coef = getattr(
             args, "move_distance_penalty_coef", 0.0
         )
@@ -589,77 +594,120 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             move_head_messages.reshape(bs, self.n_agents, -1)
         )
 
-        attack_fusion_input = th.cat([agent_hidden, attack_messages], dim=-1)
-        attack_gate_logits = self.attack_gate(
-            attack_fusion_input.reshape(bs * self.n_agents, -1)
-        ).reshape(bs, self.n_agents, 1)
-        raw_attack_gate, attack_gate = self._activate_gate(
-            attack_gate_logits,
-            activation=self.attack_gate_activation,
-            floor=self.attack_gate_floor,
-            scale=self.attack_gate_scale,
-            softplus_beta=self.attack_gate_softplus_beta,
-            max_value=self.attack_gate_max,
-        )
-        if test_mode:
-            if self.eval_force_comm_gate_open:
-                attack_gate = th.ones_like(attack_gate)
-            elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
-                attack_gate = th.zeros_like(attack_gate)
-        if self.gate_anneal_enabled:
-            scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
-            attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
-        elif self.gate_fixed_value is not None:
-            attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
-        attack_delta = self.attack_delta_head(
-            attack_fusion_input.reshape(bs * self.n_agents, -1)
-        ).reshape(bs, self.n_agents, self.attack_action_dim)
-        attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
-        attack_delta = attack_delta / attack_delta_norm
-        fused_attack_logits = (
-            local_attack_logits
-            + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
-        )
-        counterfactual_attack_logits = (
-            local_attack_logits
-            + (self.attack_fusion_scale * step_warmup_factor) * attack_delta
-        )
+        if self.fusion_mode == "hidden":
+            if self.gate_anneal_enabled:
+                gate_val = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+            elif self.gate_fixed_value is not None:
+                gate_val = self.gate_fixed_value
+            else:
+                gate_val = 0.0
+            attack_gate = agent_hidden.new_full((bs, self.n_agents, 1), gate_val)
+            move_gate = agent_hidden.new_zeros((bs, self.n_agents, 1))
+            raw_attack_gate = agent_hidden.new_full((bs, self.n_agents, 1), gate_val)
+            raw_move_gate = agent_hidden.new_zeros((bs, self.n_agents, 1))
 
-        move_fusion_input = th.cat([agent_hidden, move_messages], dim=-1)
-        move_gate_logits = self.move_gate(
-            move_fusion_input.reshape(bs * self.n_agents, -1)
-        ).reshape(bs, self.n_agents, 1)
-        raw_move_gate, move_gate = self._activate_gate(
-            move_gate_logits,
-            activation=self.move_gate_activation,
-            floor=self.move_gate_floor,
-            scale=self.move_gate_scale,
-            softplus_beta=self.move_gate_softplus_beta,
-            max_value=self.move_gate_max,
-        )
-        if test_mode:
-            if self.eval_force_comm_gate_open:
-                move_gate = th.ones_like(move_gate)
-            elif self.eval_force_comm_gate_closed or self.eval_disable_move_comm:
-                move_gate = th.zeros_like(move_gate)
-        if self.gate_anneal_enabled:
-            scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
-            move_gate = move_gate.new_full(move_gate.shape, scheduled_gate)
-        elif self.gate_fixed_value is not None:
-            move_gate = move_gate.new_full(move_gate.shape, self.gate_fixed_value)
-        move_delta = self.move_delta_head(
-            move_fusion_input.reshape(bs * self.n_agents, -1)
-        ).reshape(bs, self.n_agents, self.semantic_action_offset)
-        move_delta_norm = move_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
-        move_delta = move_delta / move_delta_norm
-        fused_move_logits = (
-            local_move_logits
-            + (self.move_fusion_scale * move_comm_factor) * move_gate * move_delta
-        )
-        counterfactual_move_logits = (
-            local_move_logits
-            + (self.move_fusion_scale * move_comm_factor) * move_delta
-        )
+            attack_delta = agent_hidden.new_zeros(1)
+            attack_delta_norm = agent_hidden.new_zeros(1)
+            move_delta = agent_hidden.new_zeros(1)
+            move_delta_norm = agent_hidden.new_zeros(1)
+
+            h_comm = self.hidden_fusion_head(
+                attack_messages.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, self.args.rnn_hidden_dim)
+            h_fused = (1.0 - gate_val) * agent_hidden + gate_val * h_comm
+
+            fused_logits = self.policy_head(
+                h_fused.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, self.n_actions)
+            fused_move_logits = fused_logits[:, :, :self.semantic_action_offset]
+            fused_attack_logits = fused_logits[:, :, self.semantic_action_offset:]
+
+            counterfactual_attack_logits = local_attack_logits
+            counterfactual_move_logits = local_move_logits
+
+            if kwargs.get("prepare_for_logging", False):
+                self._hidden_fusion_logs["h_fused_cosine"] = (
+                    F.cosine_similarity(
+                        h_fused.reshape(bs * self.n_agents, -1),
+                        agent_hidden.reshape(bs * self.n_agents, -1),
+                        dim=-1,
+                    ).mean()
+                )
+                self._hidden_fusion_logs["h_comm_norm"] = h_comm.norm(dim=-1).mean()
+                self._hidden_fusion_logs["h_local_norm"] = agent_hidden.norm(dim=-1).mean()
+                self._hidden_fusion_logs["h_fused_norm"] = h_fused.norm(dim=-1).mean()
+        else:
+            attack_fusion_input = th.cat([agent_hidden, attack_messages], dim=-1)
+            attack_gate_logits = self.attack_gate(
+                attack_fusion_input.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, 1)
+            raw_attack_gate, attack_gate = self._activate_gate(
+                attack_gate_logits,
+                activation=self.attack_gate_activation,
+                floor=self.attack_gate_floor,
+                scale=self.attack_gate_scale,
+                softplus_beta=self.attack_gate_softplus_beta,
+                max_value=self.attack_gate_max,
+            )
+            if test_mode:
+                if self.eval_force_comm_gate_open:
+                    attack_gate = th.ones_like(attack_gate)
+                elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
+                    attack_gate = th.zeros_like(attack_gate)
+            if self.gate_anneal_enabled:
+                scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+                attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
+            elif self.gate_fixed_value is not None:
+                attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
+            attack_delta = self.attack_delta_head(
+                attack_fusion_input.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, self.attack_action_dim)
+            attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+            attack_delta = attack_delta / attack_delta_norm
+            fused_attack_logits = (
+                local_attack_logits
+                + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
+            )
+            counterfactual_attack_logits = (
+                local_attack_logits
+                + (self.attack_fusion_scale * step_warmup_factor) * attack_delta
+            )
+
+            move_fusion_input = th.cat([agent_hidden, move_messages], dim=-1)
+            move_gate_logits = self.move_gate(
+                move_fusion_input.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, 1)
+            raw_move_gate, move_gate = self._activate_gate(
+                move_gate_logits,
+                activation=self.move_gate_activation,
+                floor=self.move_gate_floor,
+                scale=self.move_gate_scale,
+                softplus_beta=self.move_gate_softplus_beta,
+                max_value=self.move_gate_max,
+            )
+            if test_mode:
+                if self.eval_force_comm_gate_open:
+                    move_gate = th.ones_like(move_gate)
+                elif self.eval_force_comm_gate_closed or self.eval_disable_move_comm:
+                    move_gate = th.zeros_like(move_gate)
+            if self.gate_anneal_enabled:
+                scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+                move_gate = move_gate.new_full(move_gate.shape, scheduled_gate)
+            elif self.gate_fixed_value is not None:
+                move_gate = move_gate.new_full(move_gate.shape, self.gate_fixed_value)
+            move_delta = self.move_delta_head(
+                move_fusion_input.reshape(bs * self.n_agents, -1)
+            ).reshape(bs, self.n_agents, self.semantic_action_offset)
+            move_delta_norm = move_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+            move_delta = move_delta / move_delta_norm
+            fused_move_logits = (
+                local_move_logits
+                + (self.move_fusion_scale * move_comm_factor) * move_gate * move_delta
+            )
+            counterfactual_move_logits = (
+                local_move_logits
+                + (self.move_fusion_scale * move_comm_factor) * move_delta
+            )
 
         final_logits = th.cat([fused_move_logits, fused_attack_logits], dim=-1)
 
@@ -1297,5 +1345,9 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             if self.log_attention_maps:
                 logs["Histogram_targeted_attack_head_{}_attention".format(head_idx)] = detached_attack_alpha[:, :, :, head_idx]
                 logs["Histogram_targeted_move_head_{}_attention".format(head_idx)] = detached_move_alpha[:, :, :, head_idx]
+
+        if self.fusion_mode == "hidden" and self._hidden_fusion_logs:
+            for k, v in self._hidden_fusion_logs.items():
+                logs["Scalar_hidden_fusion_{}".format(k)] = v.detach()
 
         return logs
