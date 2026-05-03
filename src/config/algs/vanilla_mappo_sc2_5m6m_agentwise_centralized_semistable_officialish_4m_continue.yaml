@@ -1,0 +1,67 @@
+# --- Vanilla MAPPO backbone — continue seed 1 from 2.5M to 4M ---
+# Same entropy03_critic5e4 config, extended t_max.
+# LR will naturally rise from floor (0.00004 -> ~0.00021) due to
+# linear decay formula: progress = 2.5M/4M = 0.625
+# This gives training a gentle "second wind".
+
+action_selector: "multinomial"
+epsilon_start: 0.0
+epsilon_finish: 0.0
+epsilon_anneal_time: 1
+test_greedy: True
+
+runner: "parallel_local_safe"
+batch_size_run: 4
+env_reset_stagger_sec: 0.0
+
+buffer_size: 8
+batch_size: 8
+burn_in_period: 8
+num_circle: 1
+
+agent_output_type: "pi_logits"
+mask_before_softmax: True
+learner: "mappo_agentwise_centralized_officialish_learner"
+mac: "maic_mac"
+agent: "vanilla_mappo"
+
+rnn_hidden_dim: 64
+
+critic_use_local_obs: True
+critic_use_last_action: True
+critic_use_agent_id: True
+
+use_valuenorm: True
+use_huber_loss: True
+huber_delta: 10.0
+use_policy_active_masks: True
+use_value_active_masks: True
+use_clipped_value_loss: True
+
+use_linear_lr_decay: True
+actor_min_lr_ratio: 0.1
+critic_min_lr_ratio: 1.0
+target_kl: 0.02
+
+ppo_epochs: 6
+ppo_clip_param: 0.2
+value_clip_param: 0.2
+gae_lambda: 0.95
+entropy_coef: 0.03
+value_coef: 1.0
+critic_hidden_dim: 256
+
+lr: 0.0004
+critic_lr: 0.0005
+optim_eps: 0.00001
+grad_norm_clip: 5
+
+t_max: 4000000
+
+save_model: True
+save_model_interval: 25000
+
+init_checkpoint_path: "results/models/2026-05-01_16-32-51_vanilla_mappo_sc2_5m6m_agentwise_centralized_semistable_officialish_2p5m_entropy03_critic5e4_sc2_5m_vs_6m"
+init_load_step: 2479489
+
+name: "vanilla_mappo_sc2_5m6m_agentwise_centralized_semistable_officialish_4m_continue"

@@ -44,6 +44,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         if self.fusion_mode == "hidden":
             attack_msg_dim = self.topk * self.comm_value_dim
             self.hidden_fusion_head = nn.Linear(attack_msg_dim, args.rnn_hidden_dim)
+            self.fusion_layer_norm = nn.LayerNorm(args.rnn_hidden_dim)
             self._hidden_fusion_logs = {}
         self.move_distance_penalty_coef = getattr(
             args, "move_distance_penalty_coef", 0.0
@@ -116,6 +117,18 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         self.attack_no_comm_target_loss_weight = float(
             getattr(args, "attack_no_comm_target_loss_weight", 0.0)
         )
+        self.attack_entropy_target = getattr(args, "attack_entropy_target", None)
+        self.attack_entropy_target_loss_weight = float(
+            getattr(args, "attack_entropy_target_loss_weight", 0.0)
+        )
+        self.attack_entropy_upper_only = bool(
+            getattr(args, "attack_entropy_upper_only", True)
+        )
+        self.attack_entropy_can_attack_only = bool(
+            getattr(args, "attack_entropy_can_attack_only", True)
+        )
+        if self.attack_entropy_target_loss_weight > 0 and self.topk < 2:
+            raise ValueError("attack_entropy_target_loss_weight > 0 requires comm_topk >= 2")
 
         # Budget-aware alias: expose "silence budget" as an explicit knob.
         # This is an implementation-level alias (no new mechanism), so we keep
@@ -617,7 +630,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
             h_fused = (1.0 - gate_val) * agent_hidden + gate_val * h_comm
 
             fused_logits = self.policy_head(
-                h_fused.reshape(bs * self.n_agents, -1)
+                self.fusion_layer_norm(h_fused.reshape(bs * self.n_agents, -1))
             ).reshape(bs, self.n_agents, self.n_actions)
             fused_move_logits = fused_logits[:, :, :self.semantic_action_offset]
             fused_attack_logits = fused_logits[:, :, self.semantic_action_offset:]
@@ -738,6 +751,34 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 returns["attack_no_comm_loss"] = (
                     (self.attack_no_comm_target_loss_weight * step_warmup_factor)
                     * attack_no_comm_gap.clamp(min=0.0).pow(2)
+                )
+            attack_entropy_gap = None
+            if self.attack_entropy_target_loss_weight > 0:
+                attack_entropy_per_agent = -(
+                    th.clamp(attack_alpha, min=1e-8)
+                    * th.log(th.clamp(attack_alpha, min=1e-8))
+                ).sum(dim=2).mean(dim=-1)
+                if self.attack_entropy_can_attack_only:
+                    attack_entropy_mask = can_attack.squeeze(-1)
+                    denom = attack_entropy_mask.sum().clamp(min=1.0)
+                    active_attack_entropy = (
+                        attack_entropy_per_agent * attack_entropy_mask
+                    ).sum() / denom
+                else:
+                    active_attack_entropy = attack_entropy_per_agent.mean()
+                target_entropy = active_attack_entropy.new_tensor(
+                    float(self.attack_entropy_target)
+                )
+                attack_entropy_gap = active_attack_entropy - target_entropy
+                attack_entropy_penalty = (
+                    attack_entropy_gap.clamp(min=0.0)
+                    if self.attack_entropy_upper_only
+                    else attack_entropy_gap
+                )
+                returns["attack_selective_entropy_loss"] = (
+                    self.attack_entropy_target_loss_weight
+                    * step_warmup_factor
+                    * attack_entropy_penalty.pow(2)
                 )
             move_entropy_gap = None
             if self.move_entropy_target_loss_weight > 0:
@@ -896,6 +937,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     move_retreat_urgency=move_retreat_urgency,
                     move_engage_readiness=move_engage_readiness,
                     attack_no_comm_gap=attack_no_comm_gap,
+                    attack_entropy_gap=attack_entropy_gap,
                     step_warmup_factor=step_warmup_factor,
                     move_readiness_factor=move_readiness_factor,
                     move_entropy_ready=move_entropy_ready,
@@ -1171,6 +1213,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_entropy_gap=None,
         move_no_comm_gap=None,
         attack_no_comm_gap=None,
+        attack_entropy_gap=None,
         move_enemy_pressure=None,
         move_ally_support=None,
         move_retreat_urgency=None,
@@ -1229,6 +1272,20 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         )
         if attack_no_comm_gap is not None:
             logs["Scalar_targeted_attack_no_comm_gap"] = attack_no_comm_gap.detach()
+        logs["Scalar_targeted_attack_entropy_target"] = th.tensor(
+            float(self.attack_entropy_target)
+            if self.attack_entropy_target is not None
+            else 0.0,
+            device=attack_alpha.device,
+        )
+        logs["Scalar_targeted_attack_entropy_target_loss_weight"] = th.tensor(
+            float(self.attack_entropy_target_loss_weight), device=attack_alpha.device
+        )
+        logs["Scalar_targeted_attack_entropy_upper_only"] = th.tensor(
+            float(self.attack_entropy_upper_only), device=attack_alpha.device
+        )
+        if attack_entropy_gap is not None:
+            logs["Scalar_targeted_attack_entropy_gap"] = attack_entropy_gap.detach()
         logs["Scalar_targeted_attack_intent_top1_mass"] = attack_probs.detach().max(dim=-1)[0].mean()
         logs["Scalar_targeted_attack_edge_budget_ratio"] = th.tensor(
             float(min(max(1, self.topk), attack_alpha.size(2))) / float(attack_alpha.size(2)),

@@ -56,6 +56,10 @@ attack_no_comm_budget: null
 attack_no_comm_budget_loss_weight: null
 attack_no_comm_target: null
 attack_no_comm_target_loss_weight: 0.0
+attack_entropy_target: null
+attack_entropy_target_loss_weight: 0.0
+attack_entropy_upper_only: True
+attack_entropy_can_attack_only: True
 
 move_no_comm_budget: null
 move_no_comm_budget_loss_weight: null
