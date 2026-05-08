@@ -124,3 +124,6 @@ figures/
 *.blg
 *.out
 *.pdf
+*.fdb_latexmk
+*.fls
+*.xdv

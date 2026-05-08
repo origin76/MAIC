@@ -37,6 +37,7 @@ class ParallelRunner:
         self.test_returns = []
         self.train_stats = {}
         self.test_stats = {}
+        self.test_peer_local_diag_stats = {}
 
         self.log_train_stats_t = -100000
         self.agent_mask_template = np.ones((self.env_info["n_agents"], 1), dtype=np.float32)
@@ -81,6 +82,10 @@ class ParallelRunner:
         self.env_steps_this_run = 0
 
     def run(self, test_mode=False):
+        if test_mode and getattr(self.args, "eval_peer_local_diagnostic", False):
+            if len(self.test_returns) == 0 and hasattr(self.mac, "reset_eval_peer_local_diagnostic"):
+                self.mac.reset_eval_peer_local_diagnostic()
+                self.test_peer_local_diag_stats.clear()
         self.reset()
 
         all_terminated = False
@@ -170,6 +175,12 @@ class ParallelRunner:
             env_stat = parent_conn.recv()
             env_stats.append(env_stat)
 
+        if test_mode and getattr(self.args, "eval_peer_local_diagnostic", False):
+            if hasattr(self.mac, "pop_eval_peer_local_diagnostic"):
+                diag_stats = self.mac.pop_eval_peer_local_diagnostic()
+                for k, v in diag_stats.items():
+                    self.test_peer_local_diag_stats[k] = self.test_peer_local_diag_stats.get(k, 0.0) + float(v)
+
         cur_stats = self.test_stats if test_mode else self.train_stats
         cur_returns = self.test_returns if test_mode else self.train_returns
         log_prefix = "test_" if test_mode else ""
@@ -184,6 +195,9 @@ class ParallelRunner:
         if test_mode:
             if len(self.test_returns) == n_test_runs:
                 self._log(cur_returns, cur_stats, log_prefix)
+                if getattr(self.args, "eval_peer_local_diagnostic", False):
+                    self._log_peer_local_diagnostic(log_prefix)
+                    self.test_peer_local_diag_stats.clear()
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
             if hasattr(self.mac.action_selector, "epsilon"):
@@ -201,6 +215,24 @@ class ParallelRunner:
             if k != "n_episodes":
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
+
+    def _log_peer_local_diagnostic(self, prefix):
+        if not self.test_peer_local_diag_stats:
+            return
+
+        for k, v in self.test_peer_local_diag_stats.items():
+            if k.endswith("_sum"):
+                denom_key = k[:-4] + "_denom"
+                denom = self.test_peer_local_diag_stats.get(denom_key, 0.0)
+                stat_name = prefix + k[:-4]
+                if denom > 0:
+                    self.logger.log_stat(stat_name, v / denom, self.t_env)
+                else:
+                    self.logger.log_stat(stat_name, 0.0, self.t_env)
+            elif k.endswith("_denom"):
+                continue
+            else:
+                self.logger.log_stat(prefix + k, v, self.t_env)
 
     def _new_pre_transition_data(self):
         data = {

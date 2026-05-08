@@ -305,7 +305,95 @@ f_{g,\text{mov}}
 m_i^{\text{mov}}=\sum_{j\in \mathcal{N}_i^t}\bar{\alpha}_{ij}^t v_j^t.
 \end{equation}
 
-因此，攻移双流通信的研究重点已经不再是“通信能否帮助攻击决策”，而是进一步追问“移动协调为什么更难，以及怎样的结构约束才足以让移动消息避免均值化退化”。这也是该方法在本文整体叙事中承担机制分析角色的原因。
+因此，攻移双流通信的研究重点已经不再是”通信能否帮助攻击决策”，而是进一步追问”移动协调为什么更难，以及怎样的结构约束才足以让移动消息避免均值化退化”。这也是该方法在本文整体叙事中承担机制分析角色的原因。
+
+\section{攻击通信流的机制修复}
+\esection{Mechanism Repair for Attack Communication}
+
+在攻移双流通信的基础上，诊断实验揭示了一个关键问题：攻击通信流的注意力熵在所有 warm-start 配置中均为 $0.0$。这意味着攻击注意力完全退化——始终硬选同一个路由目标，没有学到任何有意义的路由选择。这个问题在 top-$k=1$ 时是结构性的：softmax 退化为退化的 one-hot 分布，且缺乏梯度信号告知注意力”应该选谁”。
+
+为解决该问题，本文对攻击通信流进行了递进式机制修复，包括以下三个核心步骤。
+
+\subsection{Top-2 软路由}
+
+将攻击通信的 top-$k$ 从 $1$ 改为 $2$，使攻击流在 $2$ 个队友之间进行软分配。该步骤成功将攻击注意力熵从 $0$ 提升至约 $\ln(2)\approx0.693$，但注意力退化为”均匀听两人”——仍然没有学到有意义的选择性。这一结果确立了后续正则化的必要性。
+
+\subsection{Upper-Only 选择性熵正则}
+
+为防止注意力退化为均匀分布，引入 upper-only 攻击注意力熵正则。设攻击注意力权重为 $\alpha^{\text{att}}_{ij}$，攻击注意力熵定义为
+\begin{equation}
+H^{\text{att}}_i = -\sum_{j\in\mathcal{N}_i} \alpha^{\text{att}}_{ij} \log \alpha^{\text{att}}_{ij},
+\end{equation}
+则 upper-only 熵正则损失为
+\begin{equation}
+L_{\text{ent}}^{\text{att}} = w_e \cdot \max(0, \bar{H}^{\text{att}} - H_{\text{target}})^2,
+\end{equation}
+其中 $w_e$ 为正则系数，$H_{\text{target}}$ 为目标熵，$\bar{H}^{\text{att}}$ 为批内平均攻击注意力熵。upper-only 的设计意味着仅当熵过高（接近 $\ln(2)$ 的均分状态）时才施加惩罚，低于目标时不干预——允许注意力自主学会选择性。
+
+\subsection{沉默预算}
+
+实验发现，仅靠熵正则不足以诱导有用的路由：攻击流可以通过选择”无通信”token 来满足正则约束（此时 no-comm 概率飙升至 $87.5\%$）。为解决该问题，引入攻击无通信评分惩罚（silence budget）：
+\begin{equation}
+s_{ij}^{\text{adj}} = s_{ij} - p_{\text{silence}} \cdot \mathbb{I}[j = \text{no-comm}],
+\end{equation}
+其中 $s_{ij}$ 为原始注意力评分，$p_{\text{silence}}$ 为沉默惩罚系数（本文取 $0.3$），$\mathbb{I}[\cdot]$ 为指示函数。该惩罚使选择 no-comm token 需要付出代价，从而将攻击流强制保持在”与真实队友通信”的状态。
+
+经过上述三步修复，攻击通信流的注意力熵稳定在 $0.35$--$0.45$ 的理想区间，无通信概率从 $87.5\%$ 降至约 $1\%$，且跨种子方差显著缩小。
+
+\subsection{意图对齐损失}
+
+为进一步鼓励通信内容与协同行为对齐，本文引入攻击意图对齐损失。设智能体 $i$ 的攻击意图概率分布为 $p_i^{\text{att}}$，接收到的消息为 $m_i^{\text{att}}$，则对齐损失鼓励消息中隐含的攻击目标与接收方后续的集火行为一致。该损失在消息层面为通信提供了额外的监督信号，最终将跨种子平均峰值胜率从 $0.704$ 提升至 $0.746$。
+
+\subsection{优势引导的动作杠杆约束}
+
+后续诊断表明，仅提高通信门控或残差强度并不能保证通信真正帮助决策。若通信残差 $\Delta_i^{\text{att}}$ 的方向尚未校准，强行增大 $g_i^{\text{att}}$ 只会把未校准扰动注入攻击 logits，反而破坏 Backbone 已有策略。因此，本文进一步将问题从“通信是否足够强”转化为“通信是否沿着有利动作方向改变策略”。
+
+设同一时刻下局部策略与攻击通信融合策略对已执行攻击动作 $a_i^t$ 的对数概率分别为
+\begin{equation}
+\log \pi_{\text{local}}(a_i^t), \qquad
+\log \pi_{\text{att-fused}}(a_i^t).
+\end{equation}
+定义通信带来的动作层对数概率增量为
+\begin{equation}
+d_i^t =
+\log \pi_{\text{att-fused}}(a_i^t)
+-
+\operatorname{sg}\!\left[
+\log \pi_{\text{local}}(a_i^t)
+\right],
+\end{equation}
+其中 $\operatorname{sg}[\cdot]$ 表示停止梯度。停止局部策略基线的梯度是必要的，否则辅助损失可能通过压低局部策略概率来“伪造”通信增益。
+
+令 $\hat{A}_i^t$ 为 MAPPO 中的归一化优势估计，$\rho_i^t$ 为攻击通信路由到真实队友的质量权重（例如真实通信质量 $1-p_{\text{no-comm}}$），$M_i^t$ 表示该样本为有效攻击动作。优势引导的动作杠杆约束定义为
+\begin{equation}
+L_{\text{adv-lev}}
+=
+\eta
+\frac{
+\sum_{t,i}
+M_i^t \rho_i^t
+\operatorname{clip}((\hat{A}_i^t)_+,0,A_{\max})
+\left[
+\max(0,\mu-d_i^t)
+\right]^2
+}{
+\sum_{t,i}M_i^t + \epsilon
+},
+\end{equation}
+其中 $\eta$ 为损失权重，$\mu$ 为很小的 log-prob margin。该损失只在正优势攻击样本上施加作用：当某次攻击动作被 Critic 认为是有利动作时，通信融合策略至少不应比局部策略更不支持该动作。与直接抬高门控不同，该约束不强迫通信在所有状态中变强，而是给通信残差提供一个动作方向上的弱监督信号。
+
+\section{通信隔离评估方法论}
+\esection{Communication Isolation Evaluation}
+
+为直接测量通信在执行期的真实边际贡献，本文提出通信隔离评估方法。对同一检查点，在测试阶段分别执行以下四种模式：
+\begin{enumerate}
+    \item \textbf{正常模式}：通信保持训练时的状态；
+    \item \textbf{强制开门}：将攻击门控强制设为 $g=1.0$，最大化通信影响；
+    \item \textbf{强制关门}：将攻击门控强制设为 $g=0.0$，消除通信影响但保留通信模块的 forward 计算；
+    \item \textbf{禁用攻击通信}：完全关闭攻击通信流，等价于纯 Backbone 决策。
+\end{enumerate}
+
+四种模式之间的胜率差值直接对应通信的不同层次贡献：normal $-$ no\_attack 衡量通信的整体边际价值；gate\_open $-$ normal 衡量门控学得是否太保守；gate\_closed $-$ no\_attack 衡量 delta 内容是否在门控为 $0$ 时仍有残余影响。这一方法论为通信机制评估提供了比单纯的平均胜率对比更精细的诊断维度。
 
 \section{算法流程总结}
 \esection{Algorithmic Summary}
@@ -324,6 +412,6 @@ m_i^{\text{mov}}=\sum_{j\in \mathcal{N}_i^t}\bar{\alpha}_{ij}^t v_j^t.
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章从问题定义出发，给出了本文基于 MAPPO 的轻量信息交互算法设计。首先，本文构建了带 centralized critic 的 vanilla MAPPO Backbone，并使用 PPO-style policy clipping、value clipping、GAE 与一系列稳定化技巧提升训练鲁棒性。随后，本文提出统一通信框架，将消息设计、路由计算和残差融合纳入同一数学表达中。最后，通过最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合以及攻移双流通信这五类递进式设计，系统展开了对消息语义、路由稀疏性和子空间融合策略的探索。
+本章从问题定义出发，给出了本文基于 MAPPO 的轻量信息交互算法设计。首先，本文构建了带 centralized critic 的 vanilla MAPPO Backbone，并使用 PPO-style policy clipping、value clipping、GAE 与一系列稳定化技巧提升训练鲁棒性。随后，本文提出统一通信框架，将消息设计、路由计算和残差融合纳入同一数学表达中。在此基础上，通过最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合以及攻移双流通信这五类递进式设计，系统展开了对消息语义、路由稀疏性和子空间融合策略的探索。最后，针对攻击通信流注意力死亡这一关键问题，本文提出了 top-2 软路由、upper-only 选择性熵正则和沉默预算三步修复方案，并引入了通信隔离评估方法论。
 
-这些设计共同构成了后续实验分析的理论基础，也为回答“何种信息交互机制真正有助于协作多智能体决策”提供了方法层面的支撑。
+这些设计共同为回答”何种信息交互机制真正有助于协作多智能体决策”提供了方法层面的支撑，也为实验分析中的系统性诊断奠定了理论基础。

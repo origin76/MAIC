@@ -129,6 +129,33 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         )
         if self.attack_entropy_target_loss_weight > 0 and self.topk < 2:
             raise ValueError("attack_entropy_target_loss_weight > 0 requires comm_topk >= 2")
+        self.attack_intent_align_loss_weight = float(
+            getattr(args, "attack_intent_align_loss_weight", 0.0)
+        )
+        self.attack_intent_align_conf_threshold = float(
+            getattr(args, "attack_intent_align_conf_threshold", 0.35)
+        )
+        self.attack_intent_align_real_mass_threshold = float(
+            getattr(args, "attack_intent_align_real_mass_threshold", 0.05)
+        )
+        self.attack_intent_align_can_attack_only = bool(
+            getattr(args, "attack_intent_align_can_attack_only", True)
+        )
+        self.attack_intent_align_detach_target = bool(
+            getattr(args, "attack_intent_align_detach_target", True)
+        )
+        self.attack_intent_align_filter_mode = getattr(
+            args, "attack_intent_align_filter_mode", "all"
+        )
+        self.attack_intent_align_local_conf_threshold = float(
+            getattr(args, "attack_intent_align_local_conf_threshold", 0.45)
+        )
+        self.attack_intent_align_local_entropy_threshold = float(
+            getattr(args, "attack_intent_align_local_entropy_threshold", 0.0)
+        )
+        self.attack_intent_align_soft_min_weight = float(
+            getattr(args, "attack_intent_align_soft_min_weight", 0.2)
+        )
 
         # Budget-aware alias: expose "silence budget" as an explicit knob.
         # This is an implementation-level alias (no new mechanism), so we keep
@@ -219,6 +246,25 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         ):
             move_no_comm_budget_loss_weight = float(no_comm_budget_loss_weight)
         self.move_no_comm_target_loss_weight = float(move_no_comm_budget_loss_weight)
+        self.attack_msg_interp_enabled = bool(
+            getattr(args, "attack_msg_interp_enabled", False)
+        )
+        if self.attack_msg_interp_enabled:
+            interp_input_dim = args.rnn_hidden_dim + self.attention_heads * self.comm_value_dim
+            self.attack_msg_interp_head = nn.Linear(interp_input_dim, args.rnn_hidden_dim)
+            self.attack_msg_quality_head = nn.Linear(args.rnn_hidden_dim, 1)
+            attack_delta_hidden_dim = getattr(args, "attack_delta_hidden_dim", args.rnn_hidden_dim)
+            self.attack_delta_head = nn.Sequential(
+                nn.Linear(args.rnn_hidden_dim, attack_delta_hidden_dim),
+                nn.ReLU(),
+                nn.Linear(attack_delta_hidden_dim, self.attack_action_dim),
+            )
+            if self.attack_delta_zero_init:
+                nn.init.constant_(self.attack_delta_head[-1].weight, 0.0)
+                nn.init.constant_(self.attack_delta_head[-1].bias, 0.0)
+            self.attack_delta_l2_weight = float(
+                getattr(args, "attack_delta_l2_weight", 0.001)
+            )
         self.move_self_feature_indices = list(
             getattr(args, "move_self_feature_indices", [0])
         )
@@ -294,6 +340,42 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         if self.attack_no_comm_score_penalty > 0 and not self.use_no_comm_token:
             raise ValueError(
                 "attack_no_comm_score_penalty requires use_no_comm_token=True"
+            )
+        if self.attack_intent_align_loss_weight < 0:
+            raise ValueError("attack_intent_align_loss_weight must be non-negative")
+        if self.attack_intent_align_conf_threshold < 0:
+            raise ValueError("attack_intent_align_conf_threshold must be non-negative")
+        if self.attack_intent_align_real_mass_threshold < 0:
+            raise ValueError(
+                "attack_intent_align_real_mass_threshold must be non-negative"
+            )
+        if self.attack_intent_align_filter_mode not in {
+            "all",
+            "uncertain",
+            "conflict",
+            "uncertain_or_conflict",
+            "uncertain_and_conflict",
+            "soft_uncertain_or_conflict",
+        }:
+            raise ValueError(
+                "Unsupported attack_intent_align_filter_mode '{}'".format(
+                    self.attack_intent_align_filter_mode
+                )
+            )
+        if self.attack_intent_align_local_conf_threshold < 0:
+            raise ValueError(
+                "attack_intent_align_local_conf_threshold must be non-negative"
+            )
+        if self.attack_intent_align_local_entropy_threshold < 0:
+            raise ValueError(
+                "attack_intent_align_local_entropy_threshold must be non-negative"
+            )
+        if (
+            self.attack_intent_align_soft_min_weight < 0.0
+            or self.attack_intent_align_soft_min_weight > 1.0
+        ):
+            raise ValueError(
+                "attack_intent_align_soft_min_weight must be in [0, 1]"
             )
         if self.move_carrier_mode not in {"default", "semantic_threat"}:
             raise ValueError(
@@ -650,33 +732,77 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 self._hidden_fusion_logs["h_local_norm"] = agent_hidden.norm(dim=-1).mean()
                 self._hidden_fusion_logs["h_fused_norm"] = h_fused.norm(dim=-1).mean()
         else:
-            attack_fusion_input = th.cat([agent_hidden, attack_messages], dim=-1)
-            attack_gate_logits = self.attack_gate(
-                attack_fusion_input.reshape(bs * self.n_agents, -1)
-            ).reshape(bs, self.n_agents, 1)
-            raw_attack_gate, attack_gate = self._activate_gate(
-                attack_gate_logits,
-                activation=self.attack_gate_activation,
-                floor=self.attack_gate_floor,
-                scale=self.attack_gate_scale,
-                softplus_beta=self.attack_gate_softplus_beta,
-                max_value=self.attack_gate_max,
-            )
-            if test_mode:
-                if self.eval_force_comm_gate_open:
-                    attack_gate = th.ones_like(attack_gate)
-                elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
-                    attack_gate = th.zeros_like(attack_gate)
-            if self.gate_anneal_enabled:
-                scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
-                attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
-            elif self.gate_fixed_value is not None:
-                attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
-            attack_delta = self.attack_delta_head(
-                attack_fusion_input.reshape(bs * self.n_agents, -1)
-            ).reshape(bs, self.n_agents, self.attack_action_dim)
-            attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
-            attack_delta = attack_delta / attack_delta_norm
+            if self.attack_msg_interp_enabled:
+                # Receiver-side message interpretation
+                h_msg = self.attack_msg_interp_head(
+                    th.cat([agent_hidden, attack_messages], dim=-1)
+                )  # (bs, n_agents, hidden_dim)
+                # Quality-conditioned gate
+                msg_quality = self.attack_msg_quality_head(
+                    h_msg.reshape(bs * self.n_agents, -1)
+                ).reshape(bs, self.n_agents, 1)
+                attack_gate_logits = msg_quality
+                raw_attack_gate = msg_quality
+                attack_gate = th.sigmoid(
+                    msg_quality + self.attack_gate_init_bias
+                )
+                if self.attack_gate_floor is not None:
+                    attack_gate = attack_gate.clamp(min=self.attack_gate_floor)
+                if self.attack_gate_max is not None:
+                    attack_gate = attack_gate.clamp(max=self.attack_gate_max)
+                if test_mode:
+                    if self.eval_force_comm_gate_open:
+                        attack_gate = th.ones_like(attack_gate)
+                    elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
+                        attack_gate = th.zeros_like(attack_gate)
+                if self.gate_anneal_enabled:
+                    scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+                    attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
+                elif self.gate_fixed_value is not None:
+                    attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
+                # Delta from interpreted message (no L2 normalization)
+                attack_delta = self.attack_delta_head(
+                    h_msg.reshape(bs * self.n_agents, -1)
+                ).reshape(bs, self.n_agents, self.attack_action_dim)
+                attack_delta_norm = attack_delta.new_zeros(1)
+                # Soft L2 penalty replaces hard normalization
+                if self.attack_delta_l2_weight > 0:
+                    delta_l2 = attack_delta.norm(dim=-1).mean()
+                    self._pending_delta_l2_penalty = (
+                        self.attack_delta_l2_weight
+                        * step_warmup_factor
+                        * delta_l2.pow(2)
+                    )
+                else:
+                    self._pending_delta_l2_penalty = None
+            else:
+                attack_fusion_input = th.cat([agent_hidden, attack_messages], dim=-1)
+                attack_gate_logits = self.attack_gate(
+                    attack_fusion_input.reshape(bs * self.n_agents, -1)
+                ).reshape(bs, self.n_agents, 1)
+                raw_attack_gate, attack_gate = self._activate_gate(
+                    attack_gate_logits,
+                    activation=self.attack_gate_activation,
+                    floor=self.attack_gate_floor,
+                    scale=self.attack_gate_scale,
+                    softplus_beta=self.attack_gate_softplus_beta,
+                    max_value=self.attack_gate_max,
+                )
+                if test_mode:
+                    if self.eval_force_comm_gate_open:
+                        attack_gate = th.ones_like(attack_gate)
+                    elif self.eval_force_comm_gate_closed or self.eval_disable_attack_comm:
+                        attack_gate = th.zeros_like(attack_gate)
+                if self.gate_anneal_enabled:
+                    scheduled_gate = self._compute_gate_anneal_value(kwargs.get("t_env", None))
+                    attack_gate = attack_gate.new_full(attack_gate.shape, scheduled_gate)
+                elif self.gate_fixed_value is not None:
+                    attack_gate = attack_gate.new_full(attack_gate.shape, self.gate_fixed_value)
+                attack_delta = self.attack_delta_head(
+                    attack_fusion_input.reshape(bs * self.n_agents, -1)
+                ).reshape(bs, self.n_agents, self.attack_action_dim)
+                attack_delta_norm = attack_delta.norm(dim=-1, keepdim=True).detach().clamp(min=1.0)
+                attack_delta = attack_delta / attack_delta_norm
             fused_attack_logits = (
                 local_attack_logits
                 + (self.attack_fusion_scale * step_warmup_factor) * attack_gate * attack_delta
@@ -725,7 +851,13 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         final_logits = th.cat([fused_move_logits, fused_attack_logits], dim=-1)
 
         returns = {}
-        if kwargs.get("train_mode", False):
+        if self.attack_msg_interp_enabled and self._pending_delta_l2_penalty is not None:
+            returns["attack_delta_l2_penalty"] = self._pending_delta_l2_penalty
+        if (
+            kwargs.get("train_mode", False)
+            or kwargs.get("collect_sequence_data", False)
+            or kwargs.get("prepare_for_logging", False)
+        ):
             attack_entropy = self._compute_mean_attention_entropy(attack_alpha)
             if self.attention_entropy_loss_weight > 0:
                 returns["attention_entropy_loss"] = (
@@ -780,6 +912,19 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     * step_warmup_factor
                     * attack_entropy_penalty.pow(2)
                 )
+            attack_intent_align_stats = None
+            if self.attack_intent_align_loss_weight > 0:
+                (
+                    returns["attack_intent_align_loss"],
+                    attack_intent_align_stats,
+                ) = self._compute_attack_intent_align_loss(
+                    attack_alpha=attack_alpha,
+                    attack_probs=attack_probs,
+                    fused_attack_logits=fused_attack_logits,
+                    attack_avail_actions=attack_avail_actions,
+                    can_attack=can_attack,
+                    step_warmup_factor=step_warmup_factor,
+                )
             move_entropy_gap = None
             if self.move_entropy_target_loss_weight > 0:
                 target_entropy = move_entropy.new_tensor(float(self.move_entropy_target))
@@ -808,18 +953,176 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     * move_no_comm_gap.pow(2)
                 )
             if (
-                self.counterfactual_usegate
-                and kwargs.get("collect_sequence_data", False)
+                kwargs.get("collect_sequence_data", False)
                 and step_warmup_factor > 0
             ):
                 chosen_actions = kwargs.get("chosen_actions", None)
+                chosen_attack_targets = None
+                attack_leverage_attack_logits = None
+                attack_counterfactual_logits = th.cat(
+                    [local_move_logits, counterfactual_attack_logits], dim=-1
+                )
+                move_counterfactual_logits = th.cat(
+                    [counterfactual_move_logits, local_attack_logits], dim=-1
+                )
+                if chosen_actions is not None:
+                    # This path intentionally keeps gradients only through the
+                    # attack communication residual. The advantage-leverage
+                    # auxiliary should calibrate communication-to-action
+                    # direction, not become an extra update on the local policy
+                    # logits through the full-action softmax denominator.
+                    attack_residual_logits = fused_attack_logits - local_attack_logits
+                    attack_leverage_attack_logits = (
+                        local_attack_logits.detach() + attack_residual_logits
+                    )
+                    attack_only_residual_logits = (
+                        counterfactual_attack_logits - local_attack_logits
+                    )
+                    attack_only_leverage_attack_logits = (
+                        local_attack_logits.detach() + attack_only_residual_logits
+                    )
+                    attack_leverage_logits = th.cat(
+                        [
+                            local_move_logits.detach(),
+                            attack_leverage_attack_logits,
+                        ],
+                        dim=-1,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_fused_logp"
+                    ] = self._compute_chosen_log_probs(
+                        attack_leverage_logits,
+                        avail_actions,
+                        chosen_actions,
+                    )
+                    chosen_action_ids = (
+                        chosen_actions.squeeze(-1)
+                        if chosen_actions.dim() == 3
+                        and chosen_actions.size(-1) == 1
+                        else chosen_actions
+                    )
+                    chosen_attack_targets = (
+                        chosen_action_ids - self.semantic_action_offset
+                    ).clamp(min=0, max=self.attack_action_dim - 1).long()
+                    returns[
+                        "seq_counterfactual_local_attack_target_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        local_attack_logits.detach(),
+                        attack_avail_actions,
+                        chosen_attack_targets,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_fused_target_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        attack_leverage_attack_logits,
+                        attack_avail_actions,
+                        chosen_attack_targets,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_stability_kl"
+                    ] = self._compute_attack_policy_kl(
+                        local_attack_logits.detach(),
+                        attack_leverage_attack_logits,
+                        attack_avail_actions,
+                    )
+                    real_alpha_for_peer = (
+                        attack_alpha[:, :, : self.n_agents, :].mean(dim=-1)
+                        if self.use_no_comm_token
+                        else attack_alpha.mean(dim=-1)
+                    ).detach()
+                    real_mass_for_peer = real_alpha_for_peer.sum(
+                        dim=-1, keepdim=True
+                    )
+                    normalized_alpha_for_peer = (
+                        real_alpha_for_peer / real_mass_for_peer.clamp(min=1e-8)
+                    )
+                    peer_intent_for_peer = th.einsum(
+                        "bij,bjd->bid",
+                        normalized_alpha_for_peer,
+                        attack_probs.detach(),
+                    )
+                    if attack_avail_actions is not None:
+                        peer_intent_for_peer = (
+                            peer_intent_for_peer * attack_avail_actions.float()
+                        )
+                    peer_mass_for_peer = peer_intent_for_peer.sum(
+                        dim=-1, keepdim=True
+                    )
+                    peer_dist_for_peer = (
+                        peer_intent_for_peer / peer_mass_for_peer.clamp(min=1e-8)
+                    )
+                    peer_top1_prob, peer_top1_targets = peer_dist_for_peer.max(
+                        dim=-1
+                    )
+                    local_top1_targets_for_margin, _ = self._masked_argmax(
+                        local_attack_logits.detach(), attack_avail_actions
+                    )
+                    returns[
+                        "seq_counterfactual_local_attack_local_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        local_attack_logits.detach(),
+                        attack_avail_actions,
+                        local_top1_targets_for_margin,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_fused_local_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        attack_leverage_attack_logits,
+                        attack_avail_actions,
+                        local_top1_targets_for_margin,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_attack_only_local_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        attack_only_leverage_attack_logits,
+                        attack_avail_actions,
+                        local_top1_targets_for_margin,
+                    )
+                    returns[
+                        "seq_counterfactual_local_attack_peer_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        local_attack_logits.detach(),
+                        attack_avail_actions,
+                        peer_top1_targets,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_fused_peer_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        attack_leverage_attack_logits,
+                        attack_avail_actions,
+                        peer_top1_targets,
+                    )
+                    returns[
+                        "seq_counterfactual_attack_attack_only_peer_top1_logp"
+                    ] = self._compute_chosen_attack_log_probs(
+                        attack_only_leverage_attack_logits,
+                        attack_avail_actions,
+                        peer_top1_targets,
+                    )
+                    if attack_avail_actions is not None:
+                        peer_top1_available = self._gather_attack_target_values(
+                            attack_avail_actions.float(),
+                            peer_top1_targets,
+                        )
+                    else:
+                        peer_top1_available = peer_top1_prob.new_ones(
+                            peer_top1_prob.shape
+                        )
+                    returns[
+                        "seq_counterfactual_attack_peer_top1_prob"
+                    ] = peer_top1_prob.detach()
+                    returns[
+                        "seq_counterfactual_attack_peer_top1_available"
+                    ] = peer_top1_available.detach()
+                    returns[
+                        "seq_counterfactual_attack_peer_top1_match_chosen"
+                    ] = (peer_top1_targets == chosen_attack_targets).float().detach()
+                    returns[
+                        "seq_counterfactual_attack_peer_top1_match_local"
+                    ] = (
+                        peer_top1_targets == local_top1_targets_for_margin
+                    ).float().detach()
                 with th.no_grad():
-                    attack_counterfactual_logits = th.cat(
-                        [local_move_logits, counterfactual_attack_logits], dim=-1
-                    )
-                    move_counterfactual_logits = th.cat(
-                        [counterfactual_move_logits, local_attack_logits], dim=-1
-                    )
                     local_action_top1, _ = self._masked_argmax(
                         local_logits, avail_actions
                     )
@@ -840,6 +1143,51 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     )
                     attack_only_top1, _ = self._masked_argmax(
                         counterfactual_attack_logits, attack_avail_actions
+                    )
+                    fused_attack_probs = self._build_attack_probs(
+                        fused_attack_logits, attack_avail_actions
+                    )
+                    attack_only_probs = self._build_attack_probs(
+                        counterfactual_attack_logits, attack_avail_actions
+                    )
+                    local_attack_top1_prob = self._gather_attack_target_values(
+                        attack_probs.detach(), local_attack_top1
+                    )
+                    fused_attack_top1_prob = self._gather_attack_target_values(
+                        fused_attack_probs.detach(), fused_attack_top1
+                    )
+                    attack_only_top1_prob = self._gather_attack_target_values(
+                        attack_only_probs.detach(), attack_only_top1
+                    )
+                    if self.use_no_comm_token:
+                        diag_real_alpha = attack_alpha[
+                            :, :, : self.n_agents, :
+                        ].mean(dim=-1)
+                        diag_no_comm_prob = attack_alpha[:, :, -1, :].mean(dim=-1)
+                    else:
+                        diag_real_alpha = attack_alpha.mean(dim=-1)
+                        diag_no_comm_prob = attack_alpha.new_zeros(bs, self.n_agents)
+                    diag_real_mass = diag_real_alpha.sum(dim=-1, keepdim=True)
+                    diag_normalized_alpha = diag_real_alpha / diag_real_mass.clamp(
+                        min=1e-8
+                    )
+                    diag_peer_intent = th.einsum(
+                        "bij,bjd->bid",
+                        diag_normalized_alpha,
+                        attack_probs.detach(),
+                    )
+                    if attack_avail_actions is not None:
+                        diag_peer_intent = (
+                            diag_peer_intent * attack_avail_actions.float()
+                        )
+                    diag_peer_mass = diag_peer_intent.sum(dim=-1, keepdim=True)
+                    diag_peer_dist = diag_peer_intent / diag_peer_mass.clamp(
+                        min=1e-8
+                    )
+                    diag_peer_top1_prob, diag_peer_top1 = diag_peer_dist.max(dim=-1)
+                    diag_peer_valid = (
+                        (diag_real_mass.squeeze(-1) > 1e-8).float()
+                        * (diag_peer_mass.squeeze(-1) > 1e-8).float()
                     )
                     (
                         local_attack_agreement,
@@ -866,6 +1214,57 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                         returns["seq_counterfactual_move_logp"] = self._compute_chosen_log_probs(
                             move_counterfactual_logits, avail_actions, chosen_actions
                         )
+                        if chosen_attack_targets is not None:
+                            local_target_prob = self._gather_attack_target_values(
+                                attack_probs.detach(), chosen_attack_targets
+                            )
+                            if self.use_no_comm_token:
+                                real_alpha = attack_alpha[
+                                    :, :, : self.n_agents, :
+                                ].mean(dim=-1)
+                            else:
+                                real_alpha = attack_alpha.mean(dim=-1)
+                            real_mass_for_intent = real_alpha.sum(
+                                dim=-1, keepdim=True
+                            )
+                            normalized_alpha = real_alpha / real_mass_for_intent.clamp(
+                                min=1e-8
+                            )
+                            peer_intent = th.einsum(
+                                "bij,bjd->bid",
+                                normalized_alpha,
+                                attack_probs.detach(),
+                            )
+                            if attack_avail_actions is not None:
+                                peer_intent = peer_intent * attack_avail_actions.float()
+                            peer_mass = peer_intent.sum(dim=-1, keepdim=True)
+                            peer_dist = peer_intent / peer_mass.clamp(min=1e-8)
+                            peer_target_prob = self._gather_attack_target_values(
+                                peer_dist, chosen_attack_targets
+                            )
+                            if attack_avail_actions is not None:
+                                target_available = self._gather_attack_target_values(
+                                    attack_avail_actions.float(),
+                                    chosen_attack_targets,
+                                )
+                            else:
+                                target_available = local_target_prob.new_ones(
+                                    local_target_prob.shape
+                                )
+                            returns[
+                                "seq_counterfactual_attack_local_target_prob"
+                            ] = local_target_prob
+                            returns[
+                                "seq_counterfactual_attack_peer_target_prob"
+                            ] = peer_target_prob
+                            returns[
+                                "seq_counterfactual_attack_local_target_match"
+                            ] = (
+                                local_attack_top1 == chosen_attack_targets
+                            ).float()
+                            returns[
+                                "seq_counterfactual_attack_target_available"
+                            ] = target_available
                     else:
                         # Backward-compatible fallback for callers that don't pass chosen actions.
                         returns[
@@ -881,6 +1280,17 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                         ] = self._build_full_policy_probs(
                             move_counterfactual_logits, avail_actions
                         )
+                if self.use_no_comm_token:
+                    attack_real_comm_mass = attack_alpha[
+                        :, :, : self.n_agents, :
+                    ].sum(dim=2).mean(dim=-1)
+                else:
+                    attack_real_comm_mass = attack_alpha.new_ones(
+                        bs, self.n_agents
+                    )
+                returns[
+                    "seq_counterfactual_attack_real_comm_mass"
+                ] = attack_real_comm_mass.detach()
                 returns["seq_counterfactual_action_flip_fused"] = (
                     local_action_top1 != fused_action_top1
                 ).float()
@@ -892,6 +1302,58 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 ).float()
                 returns["seq_counterfactual_attack_can_mask"] = attack_can_mask
                 returns["seq_counterfactual_attack_pair_valid"] = attack_pair_valid
+                returns["seq_counterfactual_attack_local_top1"] = (
+                    local_attack_top1.detach()
+                )
+                returns["seq_counterfactual_attack_peer_top1"] = (
+                    diag_peer_top1.detach()
+                )
+                returns["seq_counterfactual_attack_fused_top1"] = (
+                    fused_attack_top1.detach()
+                )
+                returns["seq_counterfactual_attack_attack_only_top1"] = (
+                    attack_only_top1.detach()
+                )
+                returns["seq_counterfactual_attack_local_top1_prob"] = (
+                    local_attack_top1_prob.detach()
+                )
+                returns["seq_counterfactual_attack_peer_top1_prob"] = (
+                    diag_peer_top1_prob.detach()
+                )
+                returns["seq_counterfactual_attack_fused_top1_prob"] = (
+                    fused_attack_top1_prob.detach()
+                )
+                returns["seq_counterfactual_attack_attack_only_top1_prob"] = (
+                    attack_only_top1_prob.detach()
+                )
+                returns["seq_counterfactual_attack_peer_valid_mask"] = (
+                    diag_peer_valid.detach()
+                )
+                returns["seq_counterfactual_attack_no_comm_prob"] = (
+                    diag_no_comm_prob.detach()
+                )
+                returns["seq_counterfactual_attack_gate"] = (
+                    attack_gate.detach().squeeze(-1)
+                )
+                if attack_delta.dim() == 3:
+                    returns["seq_counterfactual_attack_delta_abs"] = (
+                        attack_delta.detach().abs().mean(dim=-1)
+                    )
+                    attack_effective_delta = (
+                        self.attack_fusion_scale
+                        * step_warmup_factor
+                        * attack_gate.detach()
+                        * attack_delta.detach()
+                    )
+                    returns["seq_counterfactual_attack_effective_delta_abs"] = (
+                        attack_effective_delta.abs().mean(dim=-1)
+                    )
+                else:
+                    zero_delta = attack_gate.new_zeros(bs, self.n_agents)
+                    returns["seq_counterfactual_attack_delta_abs"] = zero_delta
+                    returns[
+                        "seq_counterfactual_attack_effective_delta_abs"
+                    ] = zero_delta
                 returns["seq_counterfactual_attack_target_flip"] = (
                     (local_attack_top1 != fused_attack_top1).float() * attack_can_mask
                 )
@@ -938,6 +1400,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                     move_engage_readiness=move_engage_readiness,
                     attack_no_comm_gap=attack_no_comm_gap,
                     attack_entropy_gap=attack_entropy_gap,
+                    attack_intent_align_stats=attack_intent_align_stats,
                     step_warmup_factor=step_warmup_factor,
                     move_readiness_factor=move_readiness_factor,
                     move_entropy_ready=move_entropy_ready,
@@ -946,6 +1409,170 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
                 )
 
         return final_logits.reshape(bs * self.n_agents, self.n_actions), h, returns
+
+    def _compute_attack_intent_align_loss(
+        self,
+        attack_alpha,
+        attack_probs,
+        fused_attack_logits,
+        attack_avail_actions,
+        can_attack,
+        step_warmup_factor,
+    ):
+        real_alpha = attack_alpha[:, :, : self.n_agents, :].mean(dim=-1)
+        real_mass = real_alpha.sum(dim=-1, keepdim=True)
+        normalized_alpha = real_alpha / real_mass.clamp(min=1e-8)
+
+        peer_intent = th.einsum("bij,bjd->bid", normalized_alpha, attack_probs)
+        if attack_avail_actions is not None:
+            peer_intent = peer_intent * attack_avail_actions.float()
+
+        target_mass = peer_intent.sum(dim=-1, keepdim=True)
+        target_dist = peer_intent / target_mass.clamp(min=1e-8)
+        target_conf = target_dist.max(dim=-1)[0]
+        target_top1 = target_dist.argmax(dim=-1)
+        target_entropy = -(
+            th.clamp(target_dist, min=1e-8)
+            * th.log(th.clamp(target_dist, min=1e-8))
+        ).sum(dim=-1)
+
+        local_conf = attack_probs.max(dim=-1)[0]
+        local_top1 = attack_probs.argmax(dim=-1)
+        local_entropy = -(
+            th.clamp(attack_probs, min=1e-8)
+            * th.log(th.clamp(attack_probs, min=1e-8))
+        ).sum(dim=-1)
+
+        valid_mask = (target_mass.squeeze(-1) > 1e-8).float()
+        valid_mask = valid_mask * (
+            real_mass.squeeze(-1) >= self.attack_intent_align_real_mass_threshold
+        ).float()
+        if self.attack_intent_align_can_attack_only:
+            valid_mask = valid_mask * can_attack.squeeze(-1)
+        if self.attack_intent_align_conf_threshold > 0:
+            valid_mask = valid_mask * (
+                target_conf >= self.attack_intent_align_conf_threshold
+            ).float()
+        base_valid_mask = valid_mask
+        base_denom = base_valid_mask.sum().clamp(min=1.0)
+
+        uncertain_mask = local_conf <= self.attack_intent_align_local_conf_threshold
+        if self.attack_intent_align_local_entropy_threshold > 0:
+            uncertain_mask = uncertain_mask | (
+                local_entropy >= self.attack_intent_align_local_entropy_threshold
+            )
+        conflict_mask = local_top1 != target_top1
+
+        soft_min_weight = base_valid_mask.new_tensor(
+            float(self.attack_intent_align_soft_min_weight)
+        )
+        one = base_valid_mask.new_tensor(1.0)
+        if self.attack_intent_align_local_conf_threshold > 0:
+            conf_threshold = base_valid_mask.new_tensor(
+                float(self.attack_intent_align_local_conf_threshold)
+            )
+            conf_uncertainty_score = (
+                (conf_threshold - local_conf) / conf_threshold.clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+        else:
+            conf_uncertainty_score = th.zeros_like(local_conf)
+        if self.attack_intent_align_local_entropy_threshold > 0:
+            entropy_threshold = base_valid_mask.new_tensor(
+                float(self.attack_intent_align_local_entropy_threshold)
+            )
+            entropy_uncertainty_score = (
+                local_entropy / entropy_threshold.clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+            uncertainty_score = th.maximum(
+                conf_uncertainty_score, entropy_uncertainty_score
+            )
+        else:
+            uncertainty_score = conf_uncertainty_score
+        conflict_score = conflict_mask.float()
+        need_score = th.maximum(uncertainty_score, conflict_score)
+
+        if self.attack_intent_align_filter_mode == "soft_uncertain_or_conflict":
+            align_weight = base_valid_mask * (
+                soft_min_weight + (one - soft_min_weight) * need_score
+            )
+            valid_mask = base_valid_mask
+            loss_denom = base_denom
+            stats_weight = align_weight
+            stats_denom = stats_weight.sum().clamp(min=1.0)
+        elif self.attack_intent_align_filter_mode != "all":
+            if self.attack_intent_align_filter_mode == "uncertain":
+                selective_mask = uncertain_mask
+            elif self.attack_intent_align_filter_mode == "conflict":
+                selective_mask = conflict_mask
+            elif self.attack_intent_align_filter_mode == "uncertain_and_conflict":
+                selective_mask = uncertain_mask & conflict_mask
+            else:
+                selective_mask = uncertain_mask | conflict_mask
+            valid_mask = valid_mask * selective_mask.float()
+            align_weight = valid_mask
+            loss_denom = valid_mask.sum().clamp(min=1.0)
+            stats_weight = align_weight
+            stats_denom = loss_denom
+        else:
+            align_weight = valid_mask
+            loss_denom = valid_mask.sum().clamp(min=1.0)
+            stats_weight = align_weight
+            stats_denom = loss_denom
+
+        target_for_loss = (
+            target_dist.detach()
+            if self.attack_intent_align_detach_target
+            else target_dist
+        )
+        if attack_avail_actions is not None:
+            masked_logits = fused_attack_logits.masked_fill(
+                attack_avail_actions == 0, -1e10
+            )
+        else:
+            masked_logits = fused_attack_logits
+        fused_log_probs = F.log_softmax(masked_logits, dim=-1)
+        per_agent_kl = (
+            target_for_loss
+            * (th.log(th.clamp(target_for_loss, min=1e-8)) - fused_log_probs)
+        ).sum(dim=-1)
+
+        unweighted_loss = (per_agent_kl * align_weight).sum() / loss_denom
+        loss = (
+            self.attack_intent_align_loss_weight
+            * step_warmup_factor
+            * unweighted_loss
+        )
+
+        stats = {
+            "kl": unweighted_loss.detach(),
+            "valid_ratio": valid_mask.detach().mean(),
+            "base_valid_ratio": base_valid_mask.detach().mean(),
+            "keep_ratio": (
+                valid_mask.detach().sum() / base_valid_mask.detach().sum().clamp(min=1.0)
+            ),
+            "need_score": (
+                (need_score.detach() * base_valid_mask.detach()).sum() / base_denom
+            ),
+            "soft_weight": (
+                align_weight.detach().sum() / base_denom
+            ),
+            "uncertain_ratio": uncertain_mask.float().detach().mean(),
+            "conflict_ratio": conflict_mask.float().detach().mean(),
+            "local_conf": (
+                (local_conf.detach() * stats_weight.detach()).sum() / stats_denom
+            ),
+            "local_entropy": (
+                (local_entropy.detach() * stats_weight.detach()).sum() / stats_denom
+            ),
+            "target_conf": (
+                (target_conf.detach() * stats_weight.detach()).sum() / stats_denom
+            ),
+            "target_entropy": (
+                (target_entropy.detach() * stats_weight.detach()).sum() / stats_denom
+            ),
+            "real_mass": real_mass.detach().squeeze(-1).mean(),
+        }
+        return loss, stats
 
     def _get_move_avail_actions(self, avail_actions):
         if avail_actions is None:
@@ -983,6 +1610,45 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         chosen_log_probs = th.gather(log_probs, dim=-1, index=chosen_actions).squeeze(-1)
         valid_mask = (avail_actions.sum(dim=-1) > 0).float()
         return chosen_log_probs * valid_mask
+
+    def _gather_attack_target_values(self, values, attack_targets):
+        if attack_targets.dim() == values.dim() - 1:
+            attack_targets = attack_targets.unsqueeze(-1)
+        return th.gather(values, dim=-1, index=attack_targets.long()).squeeze(-1)
+
+    def _compute_chosen_attack_log_probs(
+        self, attack_logits, attack_avail_actions, attack_targets
+    ):
+        if attack_avail_actions is None:
+            log_probs = F.log_softmax(attack_logits, dim=-1)
+            return self._gather_attack_target_values(log_probs, attack_targets)
+
+        masked_logits = attack_logits.masked_fill(attack_avail_actions == 0, -1e10)
+        log_probs = F.log_softmax(masked_logits, dim=-1)
+        chosen_log_probs = self._gather_attack_target_values(log_probs, attack_targets)
+        target_available = self._gather_attack_target_values(
+            attack_avail_actions.float(), attack_targets
+        )
+        valid_mask = (attack_avail_actions.sum(dim=-1) > 0).float()
+        return chosen_log_probs * target_available * valid_mask
+
+    def _compute_attack_policy_kl(
+        self, reference_attack_logits, attack_logits, attack_avail_actions
+    ):
+        if attack_avail_actions is not None:
+            reference_attack_logits = reference_attack_logits.masked_fill(
+                attack_avail_actions == 0, -1e10
+            )
+            attack_logits = attack_logits.masked_fill(attack_avail_actions == 0, -1e10)
+            valid_mask = (attack_avail_actions.sum(dim=-1) > 0).float()
+        else:
+            valid_mask = attack_logits.new_ones(attack_logits.shape[:-1])
+
+        reference_log_probs = F.log_softmax(reference_attack_logits, dim=-1).detach()
+        reference_probs = F.softmax(reference_attack_logits, dim=-1).detach()
+        attack_log_probs = F.log_softmax(attack_logits, dim=-1)
+        kl = (reference_probs * (reference_log_probs - attack_log_probs)).sum(dim=-1)
+        return kl * valid_mask
 
     def _masked_argmax(self, logits, avail_actions):
         if avail_actions is None:
@@ -1214,6 +1880,7 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         move_no_comm_gap=None,
         attack_no_comm_gap=None,
         attack_entropy_gap=None,
+        attack_intent_align_stats=None,
         move_enemy_pressure=None,
         move_ally_support=None,
         move_retreat_urgency=None,
@@ -1248,6 +1915,18 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         logs["Scalar_targeted_attack_gate_raw_mean"] = raw_attack_gate.detach().mean()
         logs["Scalar_targeted_attack_delta_norm"] = attack_delta.detach().norm(dim=-1).mean()
         logs["Scalar_targeted_attack_delta_abs_mean"] = attack_delta.detach().abs().mean()
+        attack_effective_delta = (
+            self.attack_fusion_scale
+            * step_warmup_factor
+            * attack_gate.detach()
+            * attack_delta.detach()
+        )
+        logs["Scalar_targeted_attack_effective_delta_norm"] = (
+            attack_effective_delta.norm(dim=-1).mean()
+        )
+        logs["Scalar_targeted_attack_effective_delta_abs_mean"] = (
+            attack_effective_delta.abs().mean()
+        )
         logs["Scalar_targeted_attack_message_norm"] = attack_messages.detach().norm(dim=-1).mean()
         logs["Scalar_targeted_attack_no_comm_prob"] = (
             detached_attack_alpha[:, :, -1, :].mean()
@@ -1286,6 +1965,68 @@ class VanillaMAPPOMicroCommDualStreamTargetedFusionAgent(
         )
         if attack_entropy_gap is not None:
             logs["Scalar_targeted_attack_entropy_gap"] = attack_entropy_gap.detach()
+        logs["Scalar_targeted_attack_intent_align_loss_weight"] = th.tensor(
+            float(self.attack_intent_align_loss_weight), device=attack_alpha.device
+        )
+        logs["Scalar_targeted_attack_intent_align_conf_threshold"] = th.tensor(
+            float(self.attack_intent_align_conf_threshold), device=attack_alpha.device
+        )
+        logs["Scalar_targeted_attack_intent_align_real_mass_threshold"] = th.tensor(
+            float(self.attack_intent_align_real_mass_threshold),
+            device=attack_alpha.device,
+        )
+        logs["Scalar_targeted_attack_intent_align_local_conf_threshold"] = th.tensor(
+            float(self.attack_intent_align_local_conf_threshold),
+            device=attack_alpha.device,
+        )
+        logs["Scalar_targeted_attack_intent_align_local_entropy_threshold"] = th.tensor(
+            float(self.attack_intent_align_local_entropy_threshold),
+            device=attack_alpha.device,
+        )
+        logs["Scalar_targeted_attack_intent_align_soft_min_weight"] = th.tensor(
+            float(self.attack_intent_align_soft_min_weight),
+            device=attack_alpha.device,
+        )
+        if attack_intent_align_stats is not None:
+            logs["Scalar_targeted_attack_intent_align_kl"] = (
+                attack_intent_align_stats["kl"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_valid_ratio"] = (
+                attack_intent_align_stats["valid_ratio"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_base_valid_ratio"] = (
+                attack_intent_align_stats["base_valid_ratio"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_keep_ratio"] = (
+                attack_intent_align_stats["keep_ratio"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_need_score"] = (
+                attack_intent_align_stats["need_score"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_soft_weight"] = (
+                attack_intent_align_stats["soft_weight"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_uncertain_ratio"] = (
+                attack_intent_align_stats["uncertain_ratio"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_conflict_ratio"] = (
+                attack_intent_align_stats["conflict_ratio"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_local_conf"] = (
+                attack_intent_align_stats["local_conf"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_local_entropy"] = (
+                attack_intent_align_stats["local_entropy"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_target_conf"] = (
+                attack_intent_align_stats["target_conf"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_target_entropy"] = (
+                attack_intent_align_stats["target_entropy"].detach()
+            )
+            logs["Scalar_targeted_attack_intent_align_real_mass"] = (
+                attack_intent_align_stats["real_mass"].detach()
+            )
         logs["Scalar_targeted_attack_intent_top1_mass"] = attack_probs.detach().max(dim=-1)[0].mean()
         logs["Scalar_targeted_attack_edge_budget_ratio"] = th.tensor(
             float(min(max(1, self.topk), attack_alpha.size(2))) / float(attack_alpha.size(2)),

@@ -10,10 +10,16 @@
 \begin{enumerate}
     \item 峰值胜率（peak），即测试胜率曲线中的最大值，用于衡量方法上限；
     \item 最终胜率（final），即最后一个有效测试点的胜率，用于衡量训练结束时的结果；
-    \item 末 5 点平均胜率（last5），即最后 5 个测试点的平均值，用于衡量方法后期稳定性。
+    \item 末 10 点平均胜率（last10），即最后 10 个测试点的平均值，用于衡量方法后期稳定性。
 \end{enumerate}
 
-需要说明的是，当前阶段论文更关注算法行为和结构结论，硬件平台、完整超参数表和多组重复实验明细将在最终定稿时进一步补全。当前图表主要由脚本 \texttt{scripts/plot\_current\_stage\_report.py} 自动生成，数值分析与图像展示保持一致。
+此外，在机制诊断阶段，本文引入以下中间指标用于分析通信模块的真实行为：
+\begin{enumerate}
+    \item 攻击注意力熵（attack attention entropy），衡量攻击通信路由的选择性，接近 $\ln(k)$ 表示对 $k$ 个候选的均匀关注；
+    \item 攻击无通信概率（attack no-comm probability），衡量攻击流选择沉默的频率；
+    \item 攻击门控均值（attack gate mean），衡量攻击通信在决策中的实际融合权重；
+    \item 通信隔离评估（communication isolation eval），通过对同一 checkpoint 分别执行正常评估、强制开门、强制关门和禁用攻击通信四种模式，直接测量攻击通信的边际贡献。
+\end{enumerate}
 
 \section{\texttt{join1} 环境中的通信原型验证}
 \esection{Communication Verification in \texttt{join1}}
@@ -29,28 +35,59 @@
 
 从图中可以看出，受约束的稀疏通信在该环境中具有明显优势，而缺乏有效结构约束的通信方法则可能出现几乎完全失效的情况。这一现象说明，通信机制并不是天然有效的协作增强器；消息编码、路由与融合方式若设计不当，反而会直接破坏训练过程。
 
-该组实验对后续研究具有两点启示。首先，通信结构必须受到约束，尤其应避免高熵平均式的信息聚合。其次，后续研究不应简单追求更强的通信表达能力，而应围绕“消息是否真正有用”这一问题展开。
+\section{SMAC \texttt{5m\_vs\_6m} 上的 Backbone 构建与训练动力学}
+\esection{Backbone Construction and Training Dynamics on SMAC \texttt{5m\_vs\_6m}}
 
-\section{SMAC \texttt{5m\_vs\_6m} 上的 MAPPO 基线构建}
-\esection{MAPPO Backbone Construction on SMAC \texttt{5m\_vs\_6m}}
+\subsection{Backbone 基线构建}
 
-在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 主线构建可靠 Backbone。图 \ref{fig:baseline} 展示了两个关键阶段：一是向官方工程风格靠拢后的 \texttt{officialish} 基线，二是在较优 checkpoint 上继续进行 300k warm-start 微调后的控制实验。
+在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 主线构建可靠 Backbone。经过 centralized critic、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，vanilla MAPPO 能够在该任务上稳定学习。
+
+与此同时，实验发现 Backbone 训练存在显著的种子敏感性。在早期配置（entropy coefficient $c_e=0.02$）下，3 个种子的最终胜率分别为 $0.575$、$0.025$ 和 $0.025$，仅 seed 1 成功。通过将 $c_e$ 提升至 $0.03$ 并降低 critic 学习率至 $5\times10^{-4}$，成功率提升至 2/3（seed 1: $0.325$、seed 2: $0.025$、seed 3: $0.200$，均为 $2.5\times10^{6}$ 步处的测试胜率）。
+
+\subsection{崩溃-恢复动力学}
+
+进一步分析 Backbone 的训练曲线后，本文发现一个重要的训练动力学特征：成功种子的学习曲线普遍经历“初期上升→中期崩溃→后期恢复并加速”三个阶段。图 \ref{fig:backbone_dynamics} 展示了基线形成与 warm-start 对照，并为后续通信 fine-tune 的起点选择提供依据。
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.95\textwidth]{generated/baseline_officialish_vs_warmstart.png}
-    \caption{vanilla MAPPO 基线的形成过程：\texttt{officialish} 与 warm-start control 对比}
-    \label{fig:baseline}
+    \caption{vanilla MAPPO Backbone 的形成过程与 warm-start 对照}
+    \label{fig:backbone_dynamics}
 \end{figure}
 
-结果表明，早期 \texttt{officialish} 基线虽然已经具备一定学习能力，但存在明显 seed 敏感性。基于导出曲线统计，其三 seed 的峰值平均仅约为 $0.292$，最终胜率平均约为 $0.125$。相比之下，在较优 checkpoint 上继续进行 300k warm-start 微调后，峰值平均提升至约 $0.854$，最终胜率平均达到约 $0.625$，末 5 点平均约为 $0.642$。这说明当前代码框架中的 vanilla MAPPO 并非无法在该任务上取得较强性能，关键在于实现细节和训练稳定性的对齐。
+该现象的深层含义是：Backbone 本身的训练动力学非常复杂，存在多个训练可到达的策略吸引子，种子决定了其落入哪个吸引子。这对后续通信实验提出了关键约束——如果 Backbone 尚未完成崩溃-恢复循环并进入稳定平台期，就引入通信 fine-tune，那么通信的“增值”将无法与 Backbone 自身的持续改善区分开来。
 
-这一结论为后续通信实验提供了坚实基础。只有当 Backbone 本身具备足够强的协作能力时，通信模块的收益和缺陷才具有分析意义。
+基于这一发现，本文后续所有通信实验均采用 warm-start 策略：先在无通信条件下训练得到强 Backbone 检查点（约 $0.675$ 胜率），再从该检查点出发做通信 fine-tune。该策略同时规避了冷启动通信直接失败的问题（详见后续分析）。
+
+\subsection{冷启动通信的结构性失败}
+
+本节对冷启动（from-scratch）通信训练的系统性诊断实验进行总结。实验围绕 8 组递进式配置展开，涵盖信息增益门控（IGG）、固定门控、warm-up 门控和门控退火等多种策略，共计超过 70 次完整训练运行。核心发现如下。
+
+\textbf{IGG 自动关门。} 在冷启动场景下，IGG 机制准确识别出通信对训练初期的策略是有害的，因此将攻击门控和移动门控均压制在约 $0.02$--$0.04$ 的地板值附近。虽然该版本获得了冷启动通信中的最高胜率（约 $11.25\%$），但门控从未打开——通信实质上被完全关闭了。此时 Backbone 仅以微量残留通信噪声干扰的形式进行局部策略学习。
+
+\textbf{固定门控摧毁 Backbone。} 若强制将门控固定在 $g=0.5$ 并移除所有 IGG 复杂度（Plan G 实验），Backbone 完全无法学习，胜率仅为约 $1.25\%$。这证明通信架构本身（注意力路由 + delta 融合）才是冷启动失败的根本噪声源，而非门控学习机制。
+
+\textbf{Warm-up 带来短暂峰值但不可持续。} 通过通信 warm-up 因子从 $0$ 线性增加到 $1$（B1 实验），Backbone 在保护期内建立了一定基础，峰值胜率达到 $15\%$——超过了 IGG 策略。但 warm-up 结束后，固定门控 $g=0.5$ 的强通信噪声在约 $4\times10^{5}$ 步后导致训练崩溃，胜率回落至 $0\%$。
+
+\textbf{门控-学习率同构性。} 综合分析表明，门控值在功能上等价于“通信学习率”：
+\[
+\frac{\partial L}{\partial\theta_{\text{comm}}} \propto g \cdot \frac{\partial L}{\partial\tilde{\ell}} \cdot \frac{\partial\Delta}{\partial\theta_{\text{comm}}}.
+\]
+大门控（如 $g=0.5$）提供强 delta 梯度，加速协调学习但积累噪声，最终导致训练发散；小门控（如 $g\approx0.04$）梯度弱，学习缓慢但训练稳定。基于这一洞察，本文提出了门控退火（Gate Annealing）策略：将门控视为第二个学习率，早期使用大门控快速学习，后期退火至小门控稳定收敛。
+
+\textbf{Hidden-State Fusion 验证。} 为从根本上解决“通信不改变决策”的问题，本文进一步尝试将通信注入点从 logit 层移至 hidden state 层：
+\[
+h_i^{\text{fused}} = (1-g) \cdot h_i^{\text{local}} + g \cdot h_i^{\text{comm}}, \quad
+\tilde{\ell}_i = f_{\pi}(h_i^{\text{fused}}).
+\]
+实验中的 cosine 相似度从 $1.0$ 持续下降至 $0.816$，验证了 hidden fusion 确实让通信改变了策略表示。然而该机制并未转化为胜率提升（峰值仅 $3.75\%$，低于 C2 的 $12.5\%$），说明单层线性 policy head 难以从正交方向的信息中提取有用决策信号。
+
+综合上述发现，冷启动通信在现有架构下始终无法产生稳定正向收益。这直接促成了本文后续的两阶段策略设计。
 
 \section{五类轻量通信算法对比}
 \esection{Comparison of Five Lightweight Communication Algorithms}
 
-在固定强 Backbone 后，本文依次实现并比较了五类轻量通信算法。图 \ref{fig:lightweight_comm_summary} 展示了不同算法及其代表配置的峰值、最终点与末 5 点平均统计，图 \ref{fig:lightweight_comm_curves} 则给出了若干代表性 run 的测试胜率曲线。
+在固定强 Backbone 后，本文依次实现并比较了五类轻量通信算法。图 \ref{fig:lightweight_comm_summary} 展示了不同算法及其代表配置的峰值、最终点与末 10 点平均统计，图 \ref{fig:lightweight_comm_curves} 则给出了若干代表性 run 的测试胜率曲线。
 
 \begin{figure}[htbp]
     \centering
@@ -66,15 +103,15 @@
     \label{fig:lightweight_comm_curves}
 \end{figure}
 
-为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。需要指出的是，动作意图共享、攻击子空间融合与攻移双流通信分别对应不同侧重点：前者在原始峰值能力上最具优势，中者在结构可解释性上最为清晰，后者则更强调对移动协同机制的分析。
+为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。
 
 \begin{table}[htbp]
     \centering
     \caption{各阶段代表配置的关键结果对比}
     \label{tab:main_results}
-    \begin{tabular}{|p{4.0cm}|p{4.3cm}|c|c|c|}
+    \begin{tabular}{|p{3.5cm}|p{4.0cm}|c|c|c|}
         \hline
-        算法类别 & 代表实现 & peak & final & last5 \\
+        算法类别 & 代表实现 & peak & final & last10 \\
         \hline
         基线 Backbone & warm-start 微调对照组 & 0.854 & 0.625 & 0.642 \\
         \hline
@@ -93,34 +130,143 @@
 
 综合图表与表格结果，可以得到以下观察。
 
-首先，最小侵入通信证明了通信分支能够在强 Backbone 上稳定接入，而不会立即破坏原有策略。其次，锐化路由通信在注意力锐化后整体表现优于最小侵入通信，说明通信模块确实受益于更强的路由选择性。再次，动作意图共享通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，攻击子空间融合将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，攻移双流通信则表明攻击协同与移动协同应区别对待，其中移动流若缺乏强稀疏路由，很容易退化为高熵平均。
+首先，最小侵入通信证明了通信分支能够在强 Backbone 上稳定接入，而不会立即破坏原有策略。其次，锐化路由通信在注意力锐化后整体表现优于最小侵入通信，说明通信模块确实受益于更强的路由选择性。再次，动作意图共享通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，攻击子空间融合将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，攻移双流通信则表明攻击协同与移动协同应区别对待。
 
-\section{攻击子空间融合与攻移双流通信的机制诊断}
-\esection{Diagnostics of Attack-Subspace Fusion and Attack-Move Dual-Stream Communication}
+\section{攻击通信流的机制修复与隔离评估}
+\esection{Attack Stream Repair and Isolation Evaluation}
 
-为了进一步分析通信模块的行为，本文对攻击子空间融合与攻移双流通信中的若干中间指标进行了诊断，包括注意力熵、无通信概率、门控均值与消息范数。图 \ref{fig:diag_attack} 给出了攻击侧通信诊断结果，图 \ref{fig:diag_move} 给出了移动侧通信诊断结果。
+\subsection{攻击注意力死亡问题}
 
-\begin{figure}[htbp]
+在攻移双流通信的基础上，诊断实验揭示了一个严重问题：攻击通信流的注意力熵在所有 warm-start 配置中均为 $0.0$，表明攻击注意力完全饱和——始终硬选同一个路由目标。这与移动流的健康熵（约 $0.4$--$0.5$）形成鲜明对比。问题根因在于攻击流使用 $\text{top-}k=1$ 时，softmax 退化为退化的 one-hot 分布，且没有任何梯度信号能够告知注意力“应该选谁”。
+
+为解决该问题，本文对攻击通信流进行了系统性的机制修复，所有实验均基于 warm-start 从同一 Backbone 检查点出发。实验结果汇总于表 \ref{tab:attack_repair}。
+
+\begin{table}[htbp]
     \centering
-    \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_attack.png}
-    \caption{攻击子空间融合与攻移双流通信的攻击侧诊断结果}
-    \label{fig:diag_attack}
-\end{figure}
+    \caption{攻击通信流机制修复的关键指标对比（3 seed 平均）}
+    \label{tab:attack_repair}
+    \begin{tabular}{|l|c|c|c|c|}
+        \hline
+        配置 & 攻击熵 & 无通信概率 & 攻击门控 & 平均峰值胜率 \\
+        \hline
+        原始 v6（top1, 无约束） & 0.000 & 0.01--0.02 & 0.06--0.07 & 0.629 \\
+        \hline
+        top2 only（无正则） & 0.693 & 0.87 & 0.06 & -- \\
+        \hline
+        top2 + selective entropy & 0.350 & 0.87 & 0.06 & -- \\
+        \hline
+        top2 + silence budget & 0.429 & 0.011 & 0.061 & 0.704 \\
+        \hline
+        top2 + silence + align & 0.449 & 0.010 & 0.067 & 0.746 \\
+        \hline
+    \end{tabular}
+\end{table}
 
-\begin{figure}[htbp]
+修复过程分为以下步骤。
+
+\textbf{步骤 1：top2 软路由。} 将攻击通信的 top-$k$ 从 $1$ 改为 $2$，使攻击流在 2 个队友之间进行软分配。该步骤成功将攻击注意力熵从 $0$ 提升至约 $0.693$（$\ln(2)$），但注意力退化为“均匀听两人”——仍然没有学到有意义的路由选择。
+
+\textbf{步骤 2：upper-only 选择性熵正则。} 引入攻击注意力熵的 upper-only 正则化：仅当熵高于目标值 $0.50$ 时才施加惩罚，低于目标时不干预。该步骤在 top2 only 的退化结果（C3 实验中 attention entropy 贴 $0.693$、no-comm 概率接近 $0$）基础上，成功将熵压制至约 $0.35$。然而，攻击流发现了一条更简单的路径——通过选择“无通信”token 来满足正则约束。此时攻击无通信概率飙升至 $87.5\%$，攻击流几乎完全沉默。
+
+\textbf{步骤 3：沉默预算。} 引入攻击无通信评分惩罚（silence budget, penalty $=0.3$），使选择 no-comm token 需要付出代价。该步骤成功将攻击无通信概率从 $87.5\%$ 压至约 $1\%$，攻击熵稳定在 $0.35$--$0.44$ 的理想区间，三 seed 平均峰值胜率从 v6 原版的 $0.629$ 提升至 $0.704$，且跨 seed 方差从 $20\%$ 缩小至 $8.75\%$。
+
+\textbf{步骤 4：意图对齐。} 在 silence budget 基础上引入攻击意图对齐损失（alignment loss），鼓励攻击通信的消息内容与接收方的实际攻击目标一致。该步骤将三 seed 平均峰值胜率进一步提升至 $0.746$，且末 10 点平均胜率达到 $0.661$——远超前序所有版本。
+
+\subsection{通信隔离评估}
+
+为直接测量攻击通信在执行期的真实边际贡献，本文设计了通信隔离评估实验。对同一检查点分别执行 128 局测试，对比以下四种模式：
+\begin{enumerate}
+    \item 正常模式（normal）：攻击通信保持训练时的状态；
+    \item 强制开门（gate\_open）：攻击门控强制设为 $1.0$；
+    \item 强制关门（gate\_closed）：攻击门控强制设为 $0.0$；
+    \item 禁用攻击通信（no\_attack）：完全关闭攻击通信流。
+\end{enumerate}
+
+对最优 align 配置（三 seed 平均峰值 $0.746$）的三个末期检查点进行评估，结果如表 \ref{tab:comm_isolation} 所示。
+
+\begin{table}[htbp]
     \centering
-    \includegraphics[width=0.96\textwidth]{generated/communication_diagnostics_move.png}
-    \caption{攻移双流通信的移动侧诊断结果}
-    \label{fig:diag_move}
-\end{figure}
+    \caption{攻击通信隔离评估结果（align 配置）}
+    \label{tab:comm_isolation}
+    \begin{tabular}{|l|c|c|c|c|c|}
+        \hline
+        Seed & normal & gate\_open & gate\_closed & no\_attack & $\Delta$ (normal $-$ no\_attack) \\
+        \hline
+        Seed 1 & 0.383 & 0.422 & 0.383 & 0.383 & 0.000 \\
+        Seed 2 & 0.750 & 0.766 & 0.750 & 0.750 & 0.000 \\
+        Seed 3 & 0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
+        \hline
+    \end{tabular}
+\end{table}
 
-从攻击侧诊断结果看，攻击子空间融合能够在较小结构代价下稳定影响攻击决策，这也是其具有较强可解释性的主要原因。相比之下，攻移双流通信在攻击流上依然可以保持一定稳定性，但其真正的难点出现在移动流。
+评估结果揭示了以下几个层次的重要发现。
 
-从移动侧诊断结果看，朴素双流结构中的移动消息更容易产生高熵平均现象，说明多个邻居的局部拓扑信息在未经约束的情况下容易被均值化。引入 top-1 稀疏路由后，移动流能够更明确地选择单个关键邻居，从而改善协同质量。进一步引入 softplus 门控后，方法的跨 seed 稳定性有所提升，但性能上界并未同步显著提高，说明当前瓶颈主要来自通信内容与稀疏路由方式，而非单纯的门控激活函数。
+\textbf{通信机制的直接证明。} Seed 3 上 $+4.7\%$ 的正向边际贡献（normal $=$ $71.1\%$ vs no\_attack $=$ $66.4\%$）是攻击通信有效性的最直接证据。该增益并非来自随机波动——四组独立评估（各 128 局）之间的系统差异清楚表明，攻击通信在该检查点上确实为集火协同提供了执行期价值。
+
+\textbf{Backbone 质量的约束作用。} Seed 1 的评估胜率（$38.3\%$）远低于训练期间的测试胜率（约 $68\%$），且四种模式结果一致。通信 fine-tune 过程在该种子上破坏了 Backbone 的局部策略质量。这一问题指向的不是通信机制本身，而是 Backbone-通信联合训练的稳定性——当 Backbone 本身处于训练动力学的不稳定期时，引入通信支路会放大优化方向的不确定性。训练时较低的测试集规模（16 局）未能及时发现该退化，说明更大规模的评估是必要的。
+
+\textbf{门控自调节的有效性。} gate\_open 在三个种子上均未显著提升胜率，且在 seed 3 上反而低于 normal（$65.6\%$ vs $71.1\%$）。这说明训练学到的门控值（约 $0.06$）并非学习失败——它确实是当前策略状态下的合理融合水平。强制开大门控只会引入额外噪声而不带来收益。
+
+\subsection{通信到动作杠杆的边界诊断}
+\esubsection{Boundary Diagnosis of Communication-to-Action Leverage}
+
+在完成 silence budget 与意图对齐实验后，本文进一步进行了两类边界诊断，用于判断后续算法改进究竟应继续围绕“路由/对齐采样”展开，还是应转向“通信如何改变动作 logits”。
+
+\textbf{软冲突对齐的负结果。} 在 hard conflict-aware alignment 中，只有少量不确定或冲突样本被保留，导致梯度高度稀疏且种子敏感。为避免该问题，本文进一步测试了 soft conflict-aware normalized alignment：保留基础有效样本，并使用
+\begin{equation}
+w_i^t = \mathbb{I}_{\text{valid}}\left(0.2+0.8\max(u_i^t,c_i^t)\right)
+\end{equation}
+作为软权重，其中 $u_i^t$ 和 $c_i^t$ 分别表示本地不确定性与局部-通信冲突程度，同时损失分母使用基础有效样本数而非被选样本数。该设计成功修复了 hard mask 的样本稀疏问题，但通信隔离评估显示 normal $-$ no\_attack 的平均差值为 $-1.0\%$，并未产生稳定的执行期正向通信贡献。这说明 alignment sampling 的平滑化并不能自动转化为真实动作层收益。
+
+\textbf{门控下限的负结果。} 为检验“通信是否只是因为门控太低而影响不到动作”，本文在 silence budget 主线上加入极轻量的 attack gate floor：将攻击门控下限设为 $0.05$，并用 $0.20$ 作为上界，避免退化为强制开门。结果如表 \ref{tab:leverage_floor} 所示。
+
+\begin{table}[htbp]
+    \centering
+    \caption{通信强度增强诊断：silence budget 与 gate floor 对比（3 seed 平均）}
+    \label{tab:leverage_floor}
+    \begin{tabular}{|l|c|c|c|c|c|}
+        \hline
+        配置 & 最终胜率 & 末 5 点均值 & 峰值 & 攻击门控 & 有效扰动 \\
+        \hline
+        silence budget & 0.667 & 0.629 & 0.833 & 0.071 & $\approx 6.4{\times}10^{-4}$ \\
+        \hline
+        gate floor & 0.479 & 0.558 & 0.813 & 0.122 & $1.2{\times}10^{-3}$ \\
+        \hline
+    \end{tabular}
+\end{table}
+
+实验表明，gate floor 确实将攻击门控从 $0.071$ 提升至 $0.122$，有效 logit 扰动也约翻倍；但最终胜率从 $0.667$ 降至 $0.479$，三个种子中有两个种子出现显著退化。与此同时，攻击 no-comm 概率仍保持在约 $0.3\%$--$0.4\%$，攻击熵也维持在健康区间。这说明失败并非来自路由坍缩或沉默逃逸，而是来自残差方向本身尚未被校准：更大的通信注入强度会更稳定地放大未校准扰动，从而伤害已有 Backbone。
+
+\textbf{Advantage-guided leverage 的边界结果。} 基于上述发现，本文进一步测试 advantage-guided attack leverage：仅在正优势攻击样本上，鼓励通信融合后的策略比本地策略更支持实际采取的攻击动作。初始 squared penalty 版本几乎没有激活该机制，attack log-prob 改变量仅约 $1.2\times10^{-5}$，有效扰动约 $4.35\times10^{-4}$。随后改用 Huber penalty 后，机制指标明显增强：攻击门控提升至 $0.171$，有效扰动提升至 $4.95\times10^{-3}$，attack log-prob 改变量提升至 $5.00\times10^{-4}$，且 no-comm 仍被压制在约 $1.5\%$。这说明 Huber leverage 确实让通信 residual 更稳定地进入动作 logits。
+
+\begin{table}[htbp]
+    \centering
+    \caption{Advantage-guided leverage 诊断结果（3 seed 平均）}
+    \label{tab:adv_leverage_huber}
+    \begin{tabular}{|l|c|c|c|c|c|c|}
+        \hline
+        配置 & final & last10 & 攻击门控 & 有效扰动 & $\Delta\log p$ & 隔离增益 \\
+        \hline
+        silence budget & 0.667 & 0.581 & 0.071 & -- & -- & -- \\
+        \hline
+        squared leverage & 0.604 & 0.588 & 0.067 & $4.35{\times}10^{-4}$ & $1.18{\times}10^{-5}$ & -- \\
+        \hline
+        Huber leverage & 0.688 & 0.573 & 0.171 & $4.95{\times}10^{-3}$ & $5.00{\times}10^{-4}$ & $-0.005$ \\
+        \hline
+    \end{tabular}
+\end{table}
+
+然而，对 Huber leverage 的 128 局通信隔离评估给出了更严格的负结果：三 seed 平均 normal 胜率为 $0.4375$，no\_attack 为 $0.4427$，normal $-$ no\_attack 的平均差值为 $-0.52\%$；gate\_open 平均为 $0.4505$，仅比 normal 高 $1.30\%$，且主要来自单个 seed 的小幅波动。同时，gate\_closed 与 no\_attack 在三个 seed 上完全一致，说明诊断开关链路是可信的。由此可见，Huber leverage 证明了“通信可以触达动作 logits”，但没有证明“通信触达的是有因果价值的动作决策”。
+
+综合来看，silence budget 仍是本文当前最稳健的攻击通信主线；soft alignment、gate floor 与 Huber leverage 的连续诊断共同表明，继续调节路由采样、通信强度或全局动作杠杆都不是最有效方向。后续算法改进应转向更细粒度的通信因果性建模：识别本地策略不确定、局部目标冲突或本地决策错误的状态，并让通信只在这些具有潜在因果价值的状态中介入，而不是全局性地让通信“更强”。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO Backbone，并在此基础上系统比较了五类轻量通信算法。
+本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO Backbone，系统分析了 Backbone 训练的崩溃-恢复动力学和种子敏感性，并在此基础上发现了冷启动通信的结构性失败。
 
-实验结果表明：轻量、残差式、低带宽通信能够在不破坏 Backbone 的前提下发挥作用；语义明确的动作意图信息比抽象隐层特征更容易被策略有效利用；将通信限制在攻击子空间能够增强结构可解释性；对移动协同而言，硬稀疏路由比简单放大通信强度更关键。上述结果为后续进一步完善信息交互算法设计提供了实验依据。
+针对冷启动通信失败，本文进行了 8 组递进式实验，涵盖 IGG、固定门控、通信 warm-up、门控退火和 hidden-state fusion 等多种策略。实验揭示了门控-学习率同构性这一关键洞察，说明门控值在功能上等价于通信学习率。
+
+进一步，本文对攻击通信流进行了系统性机制修复：从 top1 死亡到 top2 软路由、选择性熵正则、沉默预算，最终通过意图对齐将三 seed 平均峰值提升至 $0.746$。通信隔离评估实验首次提供了攻击通信有效性的因果证据，但后续 soft alignment、gate floor 与 Huber leverage 诊断也表明，通信性能提升并不等价于执行期通信因果贡献的稳定增强。特别是 Huber leverage 证明通信可以触达动作 logits，却仍未带来稳定的 normal $-$ no\_attack 正向增益，说明后续改进应转向状态条件化的通信因果性建模。
+
+这些发现共同确立了本文的核心论点：轻量、语义明确的通信机制能够产生真实协同价值，但该价值的释放依赖于 Backbone 稳定性、动作层融合方向以及介入状态选择的共同满足。当 Backbone 本身处于训练动力学的不稳定期，或通信残差在不具因果价值的状态中被全局放大时，通信支路会放大优化噪声。这一 insight 将通信研究的焦点从"设计更强的通信"转向"设计更可控、更因果化的通信"。

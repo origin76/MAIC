@@ -101,6 +101,167 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 self.counterfactual_usegate_gain_norm_eps,
             )
         )
+        self.attack_adv_leverage_loss_weight = float(
+            getattr(args, "attack_adv_leverage_loss_weight", 0.0)
+        )
+        self.attack_adv_leverage_margin = float(
+            getattr(args, "attack_adv_leverage_margin", 0.03)
+        )
+        self.attack_adv_leverage_adv_clip = getattr(
+            args, "attack_adv_leverage_adv_clip", 2.0
+        )
+        self.attack_adv_leverage_use_real_comm_weight = bool(
+            getattr(args, "attack_adv_leverage_use_real_comm_weight", True)
+        )
+        self.attack_adv_leverage_fixed_denom = bool(
+            getattr(args, "attack_adv_leverage_fixed_denom", True)
+        )
+        self.attack_adv_leverage_loss_mode = str(
+            getattr(args, "attack_adv_leverage_loss_mode", "squared")
+        ).lower()
+        self.attack_adv_leverage_huber_beta = float(
+            getattr(args, "attack_adv_leverage_huber_beta", 0.03)
+        )
+        if self.attack_adv_leverage_loss_mode not in {"squared", "huber", "linear"}:
+            raise ValueError(
+                "attack_adv_leverage_loss_mode must be one of: squared, huber, linear"
+            )
+        if self.attack_adv_leverage_huber_beta <= 0:
+            raise ValueError("attack_adv_leverage_huber_beta must be positive")
+        self.attack_causal_leverage_loss_weight = float(
+            getattr(args, "attack_causal_leverage_loss_weight", 0.0)
+        )
+        self.attack_causal_leverage_margin = float(
+            getattr(args, "attack_causal_leverage_margin", 0.02)
+        )
+        self.attack_causal_leverage_huber_beta = float(
+            getattr(args, "attack_causal_leverage_huber_beta", 0.02)
+        )
+        self.attack_causal_leverage_adv_clip = getattr(
+            args, "attack_causal_leverage_adv_clip", 2.0
+        )
+        self.attack_causal_leverage_use_real_comm_weight = bool(
+            getattr(args, "attack_causal_leverage_use_real_comm_weight", True)
+        )
+        self.attack_causal_leverage_fixed_denom = bool(
+            getattr(args, "attack_causal_leverage_fixed_denom", True)
+        )
+        self.attack_causal_local_target_prob_threshold = float(
+            getattr(args, "attack_causal_local_target_prob_threshold", 0.35)
+        )
+        self.attack_causal_peer_support_threshold = float(
+            getattr(args, "attack_causal_peer_support_threshold", 0.25)
+        )
+        self.attack_causal_stability_loss_weight = float(
+            getattr(args, "attack_causal_stability_loss_weight", 0.0)
+        )
+        self.attack_causal_bad_loss_weight = float(
+            getattr(args, "attack_causal_bad_loss_weight", 0.0)
+        )
+        self.attack_causal_bad_margin = float(
+            getattr(args, "attack_causal_bad_margin", 0.02)
+        )
+        self.attack_causal_bad_huber_beta = float(
+            getattr(args, "attack_causal_bad_huber_beta", 0.02)
+        )
+        self.attack_causal_bad_adv_clip = getattr(
+            args, "attack_causal_bad_adv_clip", 2.0
+        )
+        self.attack_causal_bad_peer_support_threshold = float(
+            getattr(args, "attack_causal_bad_peer_support_threshold", 0.55)
+        )
+        self.attack_causal_bad_peer_boost_weight = float(
+            getattr(args, "attack_causal_bad_peer_boost_weight", 0.5)
+        )
+        self.attack_peer_conflict_margin_leverage_loss_weight = float(
+            getattr(args, "attack_peer_conflict_margin_leverage_loss_weight", 0.0)
+        )
+        self.attack_peer_conflict_attack_only_margin_loss_weight = float(
+            getattr(args, "attack_peer_conflict_attack_only_margin_loss_weight", 0.0)
+        )
+        self.attack_peer_conflict_margin = float(
+            getattr(args, "attack_peer_conflict_margin", 0.03)
+        )
+        self.attack_peer_conflict_margin_huber_beta = float(
+            getattr(args, "attack_peer_conflict_margin_huber_beta", 0.02)
+        )
+        self.attack_peer_conflict_peer_support_threshold = float(
+            getattr(
+                args, "attack_peer_conflict_peer_support_threshold", 0.7
+            )
+        )
+        self.attack_peer_conflict_use_real_comm_weight = bool(
+            getattr(args, "attack_peer_conflict_use_real_comm_weight", True)
+        )
+        self.attack_peer_conflict_fixed_denom = bool(
+            getattr(args, "attack_peer_conflict_fixed_denom", True)
+        )
+        fused_local_conf_max = getattr(
+            args, "attack_peer_conflict_fused_local_conf_max", None
+        )
+        self.attack_peer_conflict_fused_local_conf_max = (
+            None if fused_local_conf_max is None else float(fused_local_conf_max)
+        )
+        self.attack_peer_conflict_fused_local_uncertainty_min_weight = float(
+            getattr(
+                args,
+                "attack_peer_conflict_fused_local_uncertainty_min_weight",
+                0.2,
+            )
+        )
+        if self.attack_causal_leverage_huber_beta <= 0:
+            raise ValueError("attack_causal_leverage_huber_beta must be positive")
+        if self.attack_causal_bad_huber_beta <= 0:
+            raise ValueError("attack_causal_bad_huber_beta must be positive")
+        if self.attack_causal_local_target_prob_threshold < 0:
+            raise ValueError(
+                "attack_causal_local_target_prob_threshold must be non-negative"
+            )
+        if self.attack_causal_peer_support_threshold < 0:
+            raise ValueError(
+                "attack_causal_peer_support_threshold must be non-negative"
+            )
+        if self.attack_causal_bad_peer_support_threshold < 0:
+            raise ValueError(
+                "attack_causal_bad_peer_support_threshold must be non-negative"
+            )
+        if self.attack_causal_bad_peer_boost_weight < 0:
+            raise ValueError(
+                "attack_causal_bad_peer_boost_weight must be non-negative"
+            )
+        if self.attack_peer_conflict_margin_leverage_loss_weight < 0:
+            raise ValueError(
+                "attack_peer_conflict_margin_leverage_loss_weight must be non-negative"
+            )
+        if self.attack_peer_conflict_attack_only_margin_loss_weight < 0:
+            raise ValueError(
+                "attack_peer_conflict_attack_only_margin_loss_weight must be non-negative"
+            )
+        if self.attack_peer_conflict_margin <= 0:
+            raise ValueError("attack_peer_conflict_margin must be positive")
+        if self.attack_peer_conflict_margin_huber_beta <= 0:
+            raise ValueError("attack_peer_conflict_margin_huber_beta must be positive")
+        if self.attack_peer_conflict_peer_support_threshold < 0 or self.attack_peer_conflict_peer_support_threshold > 1:
+            raise ValueError(
+                "attack_peer_conflict_peer_support_threshold must be in [0, 1]"
+            )
+        if (
+            self.attack_peer_conflict_fused_local_conf_max is not None
+            and (
+                self.attack_peer_conflict_fused_local_conf_max <= 0
+                or self.attack_peer_conflict_fused_local_conf_max > 1
+            )
+        ):
+            raise ValueError(
+                "attack_peer_conflict_fused_local_conf_max must be in (0, 1]"
+            )
+        if (
+            self.attack_peer_conflict_fused_local_uncertainty_min_weight < 0
+            or self.attack_peer_conflict_fused_local_uncertainty_min_weight > 1
+        ):
+            raise ValueError(
+                "attack_peer_conflict_fused_local_uncertainty_min_weight must be in [0, 1]"
+            )
         self._attack_gain_abs_ema = None
         self._move_gain_abs_ema = None
 
@@ -172,7 +333,15 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                 batch,
                 prepare_for_logging=(epoch_idx == 0 and t_env - self.log_stats_t >= self.args.learner_log_interval),
                 t_env=t_env,
-                collect_sequence_data=getattr(self.args, "counterfactual_usegate", False),
+                collect_sequence_data=(
+                    getattr(self.args, "counterfactual_usegate", False)
+                    or self.attack_adv_leverage_loss_weight > 0
+                    or self.attack_causal_leverage_loss_weight > 0
+                    or self.attack_causal_stability_loss_weight > 0
+                    or self.attack_causal_bad_loss_weight > 0
+                    or self.attack_peer_conflict_margin_leverage_loss_weight > 0
+                    or self.attack_peer_conflict_attack_only_margin_loss_weight > 0
+                ),
             )
             new_log_probs = self._get_action_log_probs(policy, actions)
             entropy = self._policy_entropy(policy)
@@ -324,6 +493,33 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
         policy_mask=None,
     ):
         total, loss_dict = super()._process_extra_losses(extra, batch)
+
+        total, loss_dict = self._process_attack_adv_leverage_loss(
+            total,
+            loss_dict,
+            extra,
+            batch,
+            actions=actions,
+            advantages=advantages,
+            policy_mask=policy_mask,
+        )
+        total, loss_dict = self._process_attack_causal_leverage_loss(
+            total,
+            loss_dict,
+            extra,
+            batch,
+            actions=actions,
+            advantages=advantages,
+            policy_mask=policy_mask,
+        )
+        total, loss_dict = self._process_attack_peer_conflict_margin_leverage_loss(
+            total,
+            loss_dict,
+            extra,
+            batch,
+            actions=actions,
+            policy_mask=policy_mask,
+        )
 
         if (
             not getattr(self.args, "counterfactual_usegate", False)
@@ -735,6 +931,820 @@ class MAPPOAgentWiseCentralizedOfficialishLearner(BudgetedSparseMAPPOLearner):
                     agreement_values["counterfactual_attack_target_agreement_attack_only"]
                     - agreement_values["counterfactual_attack_target_agreement_local"]
                 )
+
+        return total, loss_dict
+
+    def _process_attack_adv_leverage_loss(
+        self,
+        total,
+        loss_dict,
+        extra,
+        batch,
+        actions=None,
+        advantages=None,
+        policy_mask=None,
+    ):
+        if self.attack_adv_leverage_loss_weight <= 0:
+            return total, loss_dict
+        if actions is None or advantages is None or policy_mask is None:
+            return total, loss_dict
+        if (
+            "seq_counterfactual_local_logp" not in extra
+            or "seq_counterfactual_attack_fused_logp" not in extra
+        ):
+            return total, loss_dict
+
+        action_ids = actions.squeeze(-1)
+        semantic_action_offset = int(
+            getattr(self.args, "semantic_action_offset", 6)
+        )
+        attack_mask = (
+            (action_ids >= semantic_action_offset).float() * policy_mask
+        )
+        if "seq_counterfactual_attack_can_mask" in extra:
+            attack_mask = (
+                attack_mask
+                * extra["seq_counterfactual_attack_can_mask"].detach().float()
+            )
+
+        real_comm_weight = attack_mask.new_ones(attack_mask.shape)
+        if (
+            self.attack_adv_leverage_use_real_comm_weight
+            and "seq_counterfactual_attack_real_comm_mass" in extra
+        ):
+            real_comm_weight = extra[
+                "seq_counterfactual_attack_real_comm_mass"
+            ].detach().float().clamp(min=0.0, max=1.0)
+
+        positive_adv = F.relu(advantages.detach())
+        if self.attack_adv_leverage_adv_clip is not None:
+            clip_value = float(self.attack_adv_leverage_adv_clip)
+            if clip_value > 0:
+                positive_adv = positive_adv.clamp(max=clip_value)
+
+        leverage_weight = attack_mask * real_comm_weight * positive_adv
+        base_denom = attack_mask.sum().clamp(min=1.0)
+        if self.attack_adv_leverage_fixed_denom:
+            loss_denom = base_denom
+        else:
+            loss_denom = leverage_weight.sum().clamp(min=1.0)
+
+        local_log_probs = extra["seq_counterfactual_local_logp"].detach()
+        attack_fused_log_probs = extra["seq_counterfactual_attack_fused_logp"]
+        logp_delta = attack_fused_log_probs - local_log_probs
+        margin = logp_delta.new_tensor(float(self.attack_adv_leverage_margin))
+        hinge = F.relu(margin - logp_delta)
+        if self.attack_adv_leverage_loss_mode == "huber":
+            beta = hinge.new_tensor(float(self.attack_adv_leverage_huber_beta))
+            leverage_penalty = th.where(
+                hinge < beta,
+                0.5 * hinge.pow(2) / beta,
+                hinge - 0.5 * beta,
+            )
+        elif self.attack_adv_leverage_loss_mode == "linear":
+            leverage_penalty = hinge
+        else:
+            leverage_penalty = hinge.pow(2)
+        leverage_loss = self.attack_adv_leverage_loss_weight * (
+            (leverage_penalty * leverage_weight).sum() / loss_denom
+        )
+        total = total + leverage_loss
+
+        logp_delta_detached = logp_delta.detach()
+        hinge_detached = hinge.detach()
+        penalty_detached = leverage_penalty.detach()
+        weighted_denom = leverage_weight.detach().sum().clamp(min=1.0)
+        loss_dict["attack_adv_leverage_loss"] = leverage_loss.detach()
+        loss_dict["attack_adv_leverage_logp_delta_mean"] = (
+            (logp_delta_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_logp_delta_abs_mean"] = (
+            (logp_delta_detached.abs() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_hinge_mean"] = (
+            (hinge_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_penalty_mean"] = (
+            (penalty_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_weight_mean"] = (
+            leverage_weight.detach().sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_positive_ratio"] = (
+            ((positive_adv > 0).float() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_real_comm_mass"] = (
+            (real_comm_weight * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_adv_leverage_margin"] = margin.detach()
+        loss_dict["attack_adv_leverage_huber_beta"] = logp_delta.new_tensor(
+            float(self.attack_adv_leverage_huber_beta)
+        ).detach()
+        loss_dict["attack_adv_leverage_weighted_logp_delta_mean"] = (
+            (logp_delta_detached * leverage_weight.detach()).sum()
+            / weighted_denom
+        )
+        loss_dict["attack_adv_leverage_weighted_penalty_mean"] = (
+            (penalty_detached * leverage_weight.detach()).sum()
+            / weighted_denom
+        )
+        return total, loss_dict
+
+    def _process_attack_causal_leverage_loss(
+        self,
+        total,
+        loss_dict,
+        extra,
+        batch,
+        actions=None,
+        advantages=None,
+        policy_mask=None,
+    ):
+        if (
+            self.attack_causal_leverage_loss_weight <= 0
+            and self.attack_causal_stability_loss_weight <= 0
+            and self.attack_causal_bad_loss_weight <= 0
+        ):
+            return total, loss_dict
+        if actions is None or advantages is None or policy_mask is None:
+            return total, loss_dict
+
+        required_keys = (
+            "seq_counterfactual_local_attack_target_logp",
+            "seq_counterfactual_attack_fused_target_logp",
+            "seq_counterfactual_attack_local_target_prob",
+            "seq_counterfactual_attack_peer_target_prob",
+            "seq_counterfactual_attack_local_target_match",
+            "seq_counterfactual_attack_target_available",
+        )
+        if any(key not in extra for key in required_keys):
+            return total, loss_dict
+
+        action_ids = actions.squeeze(-1)
+        semantic_action_offset = int(
+            getattr(self.args, "semantic_action_offset", 6)
+        )
+        attack_mask = (
+            (action_ids >= semantic_action_offset).float() * policy_mask
+        )
+        if "seq_counterfactual_attack_can_mask" in extra:
+            attack_mask = (
+                attack_mask
+                * extra["seq_counterfactual_attack_can_mask"].detach().float()
+            )
+        target_available = extra[
+            "seq_counterfactual_attack_target_available"
+        ].detach().float()
+        attack_mask = attack_mask * target_available
+        base_denom = attack_mask.sum().clamp(min=1.0)
+
+        real_comm_weight = attack_mask.new_ones(attack_mask.shape)
+        if (
+            self.attack_causal_leverage_use_real_comm_weight
+            and "seq_counterfactual_attack_real_comm_mass" in extra
+        ):
+            real_comm_weight = extra[
+                "seq_counterfactual_attack_real_comm_mass"
+            ].detach().float().clamp(min=0.0, max=1.0)
+
+        positive_adv = F.relu(advantages.detach())
+        if self.attack_causal_leverage_adv_clip is not None:
+            clip_value = float(self.attack_causal_leverage_adv_clip)
+            if clip_value > 0:
+                positive_adv = positive_adv.clamp(max=clip_value)
+
+        local_target_prob = extra[
+            "seq_counterfactual_attack_local_target_prob"
+        ].detach().float().clamp(min=0.0, max=1.0)
+        peer_target_prob = extra[
+            "seq_counterfactual_attack_peer_target_prob"
+        ].detach().float().clamp(min=0.0, max=1.0)
+        local_target_match = extra[
+            "seq_counterfactual_attack_local_target_match"
+        ].detach().float().clamp(min=0.0, max=1.0)
+
+        mismatch_score = (1.0 - local_target_match).clamp(min=0.0, max=1.0)
+        if self.attack_causal_local_target_prob_threshold > 0:
+            local_threshold = local_target_prob.new_tensor(
+                float(self.attack_causal_local_target_prob_threshold)
+            )
+            low_local_support = (
+                (local_threshold - local_target_prob)
+                / local_threshold.clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+        else:
+            low_local_support = th.zeros_like(local_target_prob)
+        local_need_score = th.maximum(mismatch_score, low_local_support)
+
+        if self.attack_causal_peer_support_threshold > 0:
+            peer_threshold = peer_target_prob.new_tensor(
+                float(self.attack_causal_peer_support_threshold)
+            )
+            peer_support_score = (
+                peer_target_prob / peer_threshold.clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+        else:
+            peer_support_score = th.ones_like(peer_target_prob)
+
+        causal_weight = (
+            attack_mask
+            * real_comm_weight
+            * positive_adv
+            * local_need_score
+            * peer_support_score
+        )
+        if self.attack_causal_leverage_fixed_denom:
+            loss_denom = base_denom
+        else:
+            loss_denom = causal_weight.sum().clamp(min=1.0)
+
+        local_target_logp = extra[
+            "seq_counterfactual_local_attack_target_logp"
+        ].detach()
+        fused_target_logp = extra["seq_counterfactual_attack_fused_target_logp"]
+        target_logp_delta = fused_target_logp - local_target_logp
+        margin = target_logp_delta.new_tensor(
+            float(self.attack_causal_leverage_margin)
+        )
+        hinge = F.relu(margin - target_logp_delta)
+        beta = hinge.new_tensor(float(self.attack_causal_leverage_huber_beta))
+        leverage_penalty = th.where(
+            hinge < beta,
+            0.5 * hinge.pow(2) / beta,
+            hinge - 0.5 * beta,
+        )
+
+        leverage_loss = self.attack_causal_leverage_loss_weight * (
+            (leverage_penalty * causal_weight).sum() / loss_denom
+        )
+        total = total + leverage_loss
+
+        bad_loss = attack_mask.new_zeros(())
+        bad_weight = attack_mask.new_zeros(attack_mask.shape)
+        bad_chosen_delta = target_logp_delta
+        bad_peer_delta = attack_mask.new_zeros(attack_mask.shape)
+        bad_chosen_hinge = attack_mask.new_zeros(attack_mask.shape)
+        bad_peer_hinge = attack_mask.new_zeros(attack_mask.shape)
+        bad_peer_support_score = attack_mask.new_zeros(attack_mask.shape)
+        bad_peer_top1_prob = attack_mask.new_zeros(attack_mask.shape)
+        bad_peer_conflict = attack_mask.new_zeros(attack_mask.shape)
+        bad_peer_available = attack_mask.new_zeros(attack_mask.shape)
+        bad_stability_block = attack_mask.new_zeros(attack_mask.shape)
+        negative_adv = F.relu(-advantages.detach())
+        if self.attack_causal_bad_adv_clip is not None:
+            bad_clip_value = float(self.attack_causal_bad_adv_clip)
+            if bad_clip_value > 0:
+                negative_adv = negative_adv.clamp(max=bad_clip_value)
+        if (
+            self.attack_causal_bad_loss_weight > 0
+            and "seq_counterfactual_local_attack_peer_top1_logp" in extra
+            and "seq_counterfactual_attack_fused_peer_top1_logp" in extra
+            and "seq_counterfactual_attack_peer_top1_prob" in extra
+            and "seq_counterfactual_attack_peer_top1_available" in extra
+            and "seq_counterfactual_attack_peer_top1_match_chosen" in extra
+        ):
+            bad_peer_top1_prob = extra[
+                "seq_counterfactual_attack_peer_top1_prob"
+            ].detach().float().clamp(min=0.0, max=1.0)
+            bad_peer_available = extra[
+                "seq_counterfactual_attack_peer_top1_available"
+            ].detach().float().clamp(min=0.0, max=1.0)
+            bad_peer_conflict = (
+                1.0
+                - extra[
+                    "seq_counterfactual_attack_peer_top1_match_chosen"
+                ].detach().float().clamp(min=0.0, max=1.0)
+            )
+            if self.attack_causal_bad_peer_support_threshold > 0:
+                bad_peer_threshold = bad_peer_top1_prob.new_tensor(
+                    float(self.attack_causal_bad_peer_support_threshold)
+                )
+                bad_peer_support_score = (
+                    (bad_peer_top1_prob - bad_peer_threshold)
+                    / (1.0 - bad_peer_threshold).clamp(min=1e-6)
+                ).clamp(min=0.0, max=1.0)
+            else:
+                bad_peer_support_score = th.ones_like(bad_peer_top1_prob)
+
+            # The bad-action branch focuses on cases where the sampled negative-advantage
+            # attack is also the local policy's own top target. That is the closest
+            # on-policy proxy for "local policy would make this bad choice."
+            bad_weight = (
+                attack_mask
+                * real_comm_weight
+                * negative_adv
+                * local_target_match
+                * local_target_prob
+                * bad_peer_conflict
+                * bad_peer_available
+                * bad_peer_support_score
+            )
+            bad_stability_block = (bad_weight.detach() > 0).float()
+            bad_margin = target_logp_delta.new_tensor(
+                float(self.attack_causal_bad_margin)
+            )
+            bad_chosen_hinge = F.relu(bad_margin + bad_chosen_delta)
+            bad_beta = bad_chosen_hinge.new_tensor(
+                float(self.attack_causal_bad_huber_beta)
+            )
+            bad_chosen_penalty = th.where(
+                bad_chosen_hinge < bad_beta,
+                0.5 * bad_chosen_hinge.pow(2) / bad_beta,
+                bad_chosen_hinge - 0.5 * bad_beta,
+            )
+
+            bad_peer_local_logp = extra[
+                "seq_counterfactual_local_attack_peer_top1_logp"
+            ].detach()
+            bad_peer_fused_logp = extra[
+                "seq_counterfactual_attack_fused_peer_top1_logp"
+            ]
+            bad_peer_delta = bad_peer_fused_logp - bad_peer_local_logp
+            bad_peer_hinge = F.relu(bad_margin - bad_peer_delta)
+            bad_peer_penalty = th.where(
+                bad_peer_hinge < bad_beta,
+                0.5 * bad_peer_hinge.pow(2) / bad_beta,
+                bad_peer_hinge - 0.5 * bad_beta,
+            )
+            bad_combined_penalty = (
+                bad_chosen_penalty
+                + float(self.attack_causal_bad_peer_boost_weight)
+                * bad_peer_penalty
+            )
+            if self.attack_causal_leverage_fixed_denom:
+                bad_denom = base_denom
+            else:
+                bad_denom = bad_weight.sum().clamp(min=1.0)
+            bad_loss = self.attack_causal_bad_loss_weight * (
+                (bad_combined_penalty * bad_weight).sum() / bad_denom
+            )
+            total = total + bad_loss
+
+        stability_kl = extra.get("seq_counterfactual_attack_stability_kl", None)
+        if stability_kl is not None and self.attack_causal_stability_loss_weight > 0:
+            stability_weight = (
+                attack_mask
+                * real_comm_weight
+                * (1.0 - local_need_score).clamp(min=0.0, max=1.0)
+                * (1.0 - bad_stability_block).clamp(min=0.0, max=1.0)
+            )
+            stability_loss = self.attack_causal_stability_loss_weight * (
+                (stability_kl * stability_weight).sum() / base_denom
+            )
+            total = total + stability_loss
+        else:
+            stability_weight = attack_mask.new_zeros(attack_mask.shape)
+            stability_loss = attack_mask.new_zeros(())
+
+        detached_weight = causal_weight.detach()
+        weighted_denom = detached_weight.sum().clamp(min=1.0)
+        detached_stability_weight = stability_weight.detach()
+        stability_denom = detached_stability_weight.sum().clamp(min=1.0)
+        target_logp_delta_detached = target_logp_delta.detach()
+        hinge_detached = hinge.detach()
+        penalty_detached = leverage_penalty.detach()
+        detached_bad_weight = bad_weight.detach()
+        bad_weighted_denom = detached_bad_weight.sum().clamp(min=1.0)
+
+        loss_dict["attack_causal_leverage_loss"] = leverage_loss.detach()
+        loss_dict["attack_causal_bad_loss"] = bad_loss.detach()
+        loss_dict["attack_causal_stability_loss"] = stability_loss.detach()
+        loss_dict["attack_causal_target_logp_delta_mean"] = (
+            (target_logp_delta_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_target_logp_delta_abs_mean"] = (
+            (target_logp_delta_detached.abs() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_weighted_target_logp_delta_mean"] = (
+            (target_logp_delta_detached * detached_weight).sum() / weighted_denom
+        )
+        loss_dict["attack_causal_hinge_mean"] = (
+            (hinge_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_penalty_mean"] = (
+            (penalty_detached * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_weight_mean"] = detached_weight.sum() / base_denom
+        loss_dict["attack_causal_positive_ratio"] = (
+            ((positive_adv > 0).float() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_real_comm_mass"] = (
+            (real_comm_weight * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_local_need_score"] = (
+            (local_need_score * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_mismatch_score"] = (
+            (mismatch_score * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_low_local_support"] = (
+            (low_local_support * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_peer_support_score"] = (
+            (peer_support_score * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_local_target_prob"] = (
+            (local_target_prob * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_peer_target_prob"] = (
+            (peer_target_prob * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_local_target_match"] = (
+            (local_target_match * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_target_available"] = (
+            (target_available * policy_mask).sum() / policy_mask.sum().clamp(min=1.0)
+        )
+        loss_dict["attack_causal_margin"] = margin.detach()
+        loss_dict["attack_causal_huber_beta"] = target_logp_delta.new_tensor(
+            float(self.attack_causal_leverage_huber_beta)
+        ).detach()
+        loss_dict["attack_causal_local_target_prob_threshold"] = (
+            target_logp_delta.new_tensor(
+                float(self.attack_causal_local_target_prob_threshold)
+            ).detach()
+        )
+        loss_dict["attack_causal_peer_support_threshold"] = (
+            target_logp_delta.new_tensor(
+                float(self.attack_causal_peer_support_threshold)
+            ).detach()
+        )
+        loss_dict["attack_causal_safe_weight_mean"] = (
+            detached_stability_weight.sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_weight_mean"] = (
+            detached_bad_weight.sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_negative_ratio"] = (
+            ((negative_adv > 0).float() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_peer_top1_prob"] = (
+            (bad_peer_top1_prob * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_peer_support_score"] = (
+            (bad_peer_support_score * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_peer_conflict_ratio"] = (
+            (bad_peer_conflict * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_peer_available"] = (
+            (bad_peer_available * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_chosen_logp_delta_mean"] = (
+            (bad_chosen_delta.detach() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_weighted_chosen_logp_delta_mean"] = (
+            (bad_chosen_delta.detach() * detached_bad_weight).sum()
+            / bad_weighted_denom
+        )
+        loss_dict["attack_causal_bad_peer_logp_delta_mean"] = (
+            (bad_peer_delta.detach() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_weighted_peer_logp_delta_mean"] = (
+            (bad_peer_delta.detach() * detached_bad_weight).sum()
+            / bad_weighted_denom
+        )
+        loss_dict["attack_causal_bad_chosen_hinge_mean"] = (
+            (bad_chosen_hinge.detach() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_peer_hinge_mean"] = (
+            (bad_peer_hinge.detach() * attack_mask).sum() / base_denom
+        )
+        loss_dict["attack_causal_bad_margin"] = target_logp_delta.new_tensor(
+            float(self.attack_causal_bad_margin)
+        ).detach()
+        loss_dict["attack_causal_bad_huber_beta"] = target_logp_delta.new_tensor(
+            float(self.attack_causal_bad_huber_beta)
+        ).detach()
+        loss_dict["attack_causal_bad_peer_support_threshold"] = (
+            target_logp_delta.new_tensor(
+                float(self.attack_causal_bad_peer_support_threshold)
+            ).detach()
+        )
+        loss_dict["attack_causal_bad_peer_boost_weight"] = (
+            target_logp_delta.new_tensor(
+                float(self.attack_causal_bad_peer_boost_weight)
+            ).detach()
+        )
+        if stability_kl is not None:
+            stability_kl_detached = stability_kl.detach()
+            loss_dict["attack_causal_stability_kl_mean"] = (
+                (stability_kl_detached * attack_mask).sum() / base_denom
+            )
+            loss_dict["attack_causal_weighted_stability_kl_mean"] = (
+                (stability_kl_detached * detached_stability_weight).sum()
+                / stability_denom
+            )
+        return total, loss_dict
+
+    def _process_attack_peer_conflict_margin_leverage_loss(
+        self,
+        total,
+        loss_dict,
+        extra,
+        batch,
+        actions=None,
+        policy_mask=None,
+    ):
+        if (
+            self.attack_peer_conflict_margin_leverage_loss_weight <= 0
+            and self.attack_peer_conflict_attack_only_margin_loss_weight <= 0
+        ):
+            return total, loss_dict
+        if policy_mask is None:
+            return total, loss_dict
+
+        base_required_keys = (
+            "seq_counterfactual_attack_peer_top1_prob",
+            "seq_counterfactual_attack_local_top1_prob",
+            "seq_counterfactual_attack_peer_valid_mask",
+            "seq_counterfactual_attack_can_mask",
+            "seq_counterfactual_attack_peer_top1",
+            "seq_counterfactual_attack_local_top1",
+        )
+        if any(key not in extra for key in base_required_keys):
+            return total, loss_dict
+
+        fused_required_keys = (
+            "seq_counterfactual_attack_fused_peer_top1_logp",
+            "seq_counterfactual_attack_fused_local_top1_logp",
+        )
+        attack_only_required_keys = (
+            "seq_counterfactual_attack_attack_only_peer_top1_logp",
+            "seq_counterfactual_attack_attack_only_local_top1_logp",
+        )
+        fused_margin_enabled = (
+            self.attack_peer_conflict_margin_leverage_loss_weight > 0
+            and all(key in extra for key in fused_required_keys)
+        )
+        attack_only_margin_enabled = (
+            self.attack_peer_conflict_attack_only_margin_loss_weight > 0
+            and all(key in extra for key in attack_only_required_keys)
+        )
+        if not fused_margin_enabled and not attack_only_margin_enabled:
+            return total, loss_dict
+
+        attack_can = extra["seq_counterfactual_attack_can_mask"].detach().float()
+        peer_valid = extra[
+            "seq_counterfactual_attack_peer_valid_mask"
+        ].detach().float()
+        # Do not condition this auxiliary on the sampled/chosen action. The
+        # diagnostic showed chosen attacks are almost always local-top1, which
+        # would recreate the on-policy lock we are trying to break.
+        base_mask = policy_mask * attack_can * peer_valid
+        base_denom = base_mask.sum().clamp(min=1.0)
+
+        peer_top1 = extra["seq_counterfactual_attack_peer_top1"].detach().long()
+        local_top1 = extra["seq_counterfactual_attack_local_top1"].detach().long()
+        conflict = (peer_top1 != local_top1).float() * base_mask
+
+        peer_conf = extra[
+            "seq_counterfactual_attack_peer_top1_prob"
+        ].detach().float().clamp(min=0.0, max=1.0)
+        local_conf = extra[
+            "seq_counterfactual_attack_local_top1_prob"
+        ].detach().float().clamp(min=0.0, max=1.0)
+        threshold = float(self.attack_peer_conflict_peer_support_threshold)
+        if threshold > 0:
+            threshold_tensor = peer_conf.new_tensor(threshold)
+            peer_support_score = (
+                (peer_conf - threshold_tensor)
+                / (1.0 - threshold_tensor).clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+        else:
+            peer_support_score = th.ones_like(peer_conf)
+
+        real_comm_weight = base_mask.new_ones(base_mask.shape)
+        if (
+            self.attack_peer_conflict_use_real_comm_weight
+            and "seq_counterfactual_attack_real_comm_mass" in extra
+        ):
+            real_comm_weight = extra[
+                "seq_counterfactual_attack_real_comm_mass"
+            ].detach().float().clamp(min=0.0, max=1.0)
+
+        leverage_weight = (
+            conflict
+            * real_comm_weight
+            * peer_support_score
+            * local_conf
+        )
+        fused_local_uncertainty_weight = th.ones_like(leverage_weight)
+        if self.attack_peer_conflict_fused_local_conf_max is not None:
+            local_conf_max = local_conf.new_tensor(
+                float(self.attack_peer_conflict_fused_local_conf_max)
+            )
+            min_weight = local_conf.new_tensor(
+                float(self.attack_peer_conflict_fused_local_uncertainty_min_weight)
+            )
+            local_uncertainty = (
+                (local_conf_max - local_conf)
+                / local_conf_max.clamp(min=1e-6)
+            ).clamp(min=0.0, max=1.0)
+            fused_local_uncertainty_weight = (
+                min_weight + (1.0 - min_weight) * local_uncertainty
+            )
+        fused_leverage_weight = leverage_weight * fused_local_uncertainty_weight
+        if self.attack_peer_conflict_fixed_denom:
+            fused_loss_denom = base_denom
+            attack_only_loss_denom = base_denom
+        else:
+            fused_loss_denom = fused_leverage_weight.sum().clamp(min=1.0)
+            attack_only_loss_denom = leverage_weight.sum().clamp(min=1.0)
+
+        detached_weight = leverage_weight.detach()
+        weighted_denom = detached_weight.sum().clamp(min=1.0)
+        fused_detached_weight = fused_leverage_weight.detach()
+        fused_weighted_denom = fused_detached_weight.sum().clamp(min=1.0)
+        conflict_denom = conflict.sum().clamp(min=1.0)
+        target_margin = peer_conf.new_tensor(float(self.attack_peer_conflict_margin))
+        beta = peer_conf.new_tensor(float(self.attack_peer_conflict_margin_huber_beta))
+
+        def _margin_terms(peer_logp, local_logp):
+            margin = peer_logp - local_logp
+            hinge = F.relu(target_margin - margin)
+            penalty = th.where(
+                hinge < beta,
+                0.5 * hinge.pow(2) / beta,
+                hinge - 0.5 * beta,
+            )
+            return margin, hinge, penalty
+
+        total_margin_loss = target_margin.new_zeros(())
+
+        if fused_margin_enabled:
+            fused_peer_logp = extra[
+                "seq_counterfactual_attack_fused_peer_top1_logp"
+            ]
+            fused_local_logp = extra[
+                "seq_counterfactual_attack_fused_local_top1_logp"
+            ]
+            fused_margin, hinge, margin_penalty = _margin_terms(
+                fused_peer_logp, fused_local_logp
+            )
+            margin_loss = self.attack_peer_conflict_margin_leverage_loss_weight * (
+                (margin_penalty * fused_leverage_weight).sum() / fused_loss_denom
+            )
+            total_margin_loss = total_margin_loss + margin_loss
+
+            fused_margin_detached = fused_margin.detach()
+            hinge_detached = hinge.detach()
+            margin_penalty_detached = margin_penalty.detach()
+
+            loss_dict["attack_peer_conflict_margin_loss"] = margin_loss.detach()
+            loss_dict["attack_peer_conflict_margin_logp_delta_mean"] = (
+                (fused_margin_detached * conflict).sum() / conflict_denom
+            )
+            loss_dict["attack_peer_conflict_margin_weighted_logp_delta_mean"] = (
+                (fused_margin_detached * fused_detached_weight).sum()
+                / fused_weighted_denom
+            )
+            loss_dict["attack_peer_conflict_margin_hinge_mean"] = (
+                (hinge_detached * conflict).sum() / conflict_denom
+            )
+            loss_dict["attack_peer_conflict_margin_weighted_hinge_mean"] = (
+                (hinge_detached * fused_detached_weight).sum()
+                / fused_weighted_denom
+            )
+            loss_dict["attack_peer_conflict_margin_penalty_mean"] = (
+                (margin_penalty_detached * conflict).sum() / conflict_denom
+            )
+
+        if attack_only_margin_enabled:
+            attack_only_peer_logp = extra[
+                "seq_counterfactual_attack_attack_only_peer_top1_logp"
+            ]
+            attack_only_local_logp = extra[
+                "seq_counterfactual_attack_attack_only_local_top1_logp"
+            ]
+            (
+                attack_only_margin,
+                attack_only_hinge,
+                attack_only_margin_penalty,
+            ) = _margin_terms(attack_only_peer_logp, attack_only_local_logp)
+            attack_only_margin_loss = (
+                self.attack_peer_conflict_attack_only_margin_loss_weight
+                * (
+                    (attack_only_margin_penalty * leverage_weight).sum()
+                    / attack_only_loss_denom
+                )
+            )
+            total_margin_loss = total_margin_loss + attack_only_margin_loss
+
+            attack_only_margin_detached = attack_only_margin.detach()
+            attack_only_hinge_detached = attack_only_hinge.detach()
+            attack_only_margin_penalty_detached = attack_only_margin_penalty.detach()
+
+            loss_dict[
+                "attack_peer_conflict_attack_only_margin_loss"
+            ] = attack_only_margin_loss.detach()
+            loss_dict[
+                "attack_peer_conflict_attack_only_logp_delta_mean"
+            ] = (
+                (attack_only_margin_detached * conflict).sum() / conflict_denom
+            )
+            loss_dict[
+                "attack_peer_conflict_attack_only_weighted_logp_delta_mean"
+            ] = (
+                (attack_only_margin_detached * detached_weight).sum()
+                / weighted_denom
+            )
+            loss_dict["attack_peer_conflict_attack_only_hinge_mean"] = (
+                (attack_only_hinge_detached * conflict).sum() / conflict_denom
+            )
+            loss_dict[
+                "attack_peer_conflict_attack_only_weighted_hinge_mean"
+            ] = (
+                (attack_only_hinge_detached * detached_weight).sum()
+                / weighted_denom
+            )
+            loss_dict[
+                "attack_peer_conflict_attack_only_penalty_mean"
+            ] = (
+                (attack_only_margin_penalty_detached * conflict).sum()
+                / conflict_denom
+            )
+
+        total = total + total_margin_loss
+
+        loss_dict[
+            "attack_peer_conflict_margin_total_loss"
+        ] = total_margin_loss.detach()
+        loss_dict["attack_peer_conflict_margin_weight_mean"] = (
+            detached_weight.sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_fused_margin_weight_mean"] = (
+            fused_detached_weight.sum() / base_denom
+        )
+        loss_dict[
+            "attack_peer_conflict_fused_local_uncertainty_weight_mean"
+        ] = (
+            (fused_local_uncertainty_weight.detach() * conflict).sum()
+            / conflict_denom
+        )
+        loss_dict[
+            "attack_peer_conflict_fused_local_uncertainty_weighted_local_conf"
+        ] = (
+            (local_conf * fused_detached_weight).sum() / fused_weighted_denom
+        )
+        loss_dict["attack_peer_conflict_margin_conflict_rate"] = (
+            conflict.sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_margin_peer_conf"] = (
+            (peer_conf * base_mask).sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_margin_local_conf"] = (
+            (local_conf * base_mask).sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_margin_peer_support_score"] = (
+            (peer_support_score * base_mask).sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_margin_real_comm_mass"] = (
+            (real_comm_weight * base_mask).sum() / base_denom
+        )
+        loss_dict["attack_peer_conflict_margin"] = target_margin.detach()
+        loss_dict["attack_peer_conflict_margin_huber_beta"] = beta.detach()
+        loss_dict["attack_peer_conflict_peer_support_threshold"] = (
+            target_margin.new_tensor(threshold).detach()
+        )
+        fused_local_conf_max = (
+            -1.0
+            if self.attack_peer_conflict_fused_local_conf_max is None
+            else float(self.attack_peer_conflict_fused_local_conf_max)
+        )
+        loss_dict["attack_peer_conflict_fused_local_conf_max"] = (
+            target_margin.new_tensor(fused_local_conf_max).detach()
+        )
+        loss_dict[
+            "attack_peer_conflict_fused_local_uncertainty_min_weight"
+        ] = (
+            target_margin.new_tensor(
+                float(self.attack_peer_conflict_fused_local_uncertainty_min_weight)
+            ).detach()
+        )
+
+        if "seq_counterfactual_attack_fused_top1" in extra:
+            fused_top1 = extra["seq_counterfactual_attack_fused_top1"].detach().long()
+            loss_dict["attack_peer_conflict_fused_follow_peer_rate"] = (
+                ((fused_top1 == peer_top1).float() * conflict).sum()
+                / conflict_denom
+            )
+            loss_dict["attack_peer_conflict_fused_stay_local_rate"] = (
+                ((fused_top1 == local_top1).float() * conflict).sum()
+                / conflict_denom
+            )
+        if "seq_counterfactual_attack_attack_only_top1" in extra:
+            attack_only_top1 = extra[
+                "seq_counterfactual_attack_attack_only_top1"
+            ].detach().long()
+            loss_dict["attack_peer_conflict_attack_only_follow_peer_rate"] = (
+                ((attack_only_top1 == peer_top1).float() * conflict).sum()
+                / conflict_denom
+            )
+            loss_dict["attack_peer_conflict_attack_only_stay_local_rate"] = (
+                ((attack_only_top1 == local_top1).float() * conflict).sum()
+                / conflict_denom
+            )
 
         return total, loss_dict
 

@@ -147,6 +147,10 @@ def evaluate_sequential(args, runner):
     for _ in range(n_test_runs):
         runner.run(test_mode=True)
 
+    if hasattr(runner, "logger"):
+        runner.logger.log_stat("episode", 0, runner.t_env)
+        runner.logger.print_recent_stats()
+
     if args.save_replay:
         runner.save_replay()
 

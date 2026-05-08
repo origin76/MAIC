@@ -44,6 +44,8 @@ eval_disable_no_comm_token: False
 eval_disable_attack_comm: False
 # Eval-only diagnostic: disable only the move communication stream.
 eval_disable_move_comm: False
+# Eval-only diagnostic: log peer-vs-local attack target causal statistics.
+eval_peer_local_diagnostic: False
 
 # Communication ablations/regularizers (optional, agent-specific).
 attack_no_comm_score_penalty: 0.0
@@ -60,6 +62,48 @@ attack_entropy_target: null
 attack_entropy_target_loss_weight: 0.0
 attack_entropy_upper_only: True
 attack_entropy_can_attack_only: True
+attack_intent_align_loss_weight: 0.0
+attack_intent_align_conf_threshold: 0.35
+attack_intent_align_real_mass_threshold: 0.05
+attack_intent_align_can_attack_only: True
+attack_intent_align_detach_target: True
+attack_intent_align_filter_mode: "all"
+attack_msg_interp_enabled: False
+attack_delta_l2_weight: 0.001
+attack_intent_align_local_conf_threshold: 0.45
+attack_intent_align_local_entropy_threshold: 0.0
+attack_intent_align_soft_min_weight: 0.2
+attack_adv_leverage_loss_weight: 0.0
+attack_adv_leverage_margin: 0.03
+attack_adv_leverage_adv_clip: 2.0
+attack_adv_leverage_use_real_comm_weight: True
+attack_adv_leverage_fixed_denom: True
+attack_adv_leverage_loss_mode: "squared"
+attack_adv_leverage_huber_beta: 0.03
+attack_causal_leverage_loss_weight: 0.0
+attack_causal_leverage_margin: 0.02
+attack_causal_leverage_huber_beta: 0.02
+attack_causal_leverage_adv_clip: 2.0
+attack_causal_leverage_use_real_comm_weight: True
+attack_causal_leverage_fixed_denom: True
+attack_causal_local_target_prob_threshold: 0.35
+attack_causal_peer_support_threshold: 0.25
+attack_causal_stability_loss_weight: 0.0
+attack_causal_bad_loss_weight: 0.0
+attack_causal_bad_margin: 0.02
+attack_causal_bad_huber_beta: 0.02
+attack_causal_bad_adv_clip: 2.0
+attack_causal_bad_peer_support_threshold: 0.55
+attack_causal_bad_peer_boost_weight: 0.5
+attack_peer_conflict_margin_leverage_loss_weight: 0.0
+attack_peer_conflict_attack_only_margin_loss_weight: 0.0
+attack_peer_conflict_margin: 0.03
+attack_peer_conflict_margin_huber_beta: 0.02
+attack_peer_conflict_peer_support_threshold: 0.7
+attack_peer_conflict_use_real_comm_weight: True
+attack_peer_conflict_fixed_denom: True
+attack_peer_conflict_fused_local_conf_max: null
+attack_peer_conflict_fused_local_uncertainty_min_weight: 0.2
 
 move_no_comm_budget: null
 move_no_comm_budget_loss_weight: null
