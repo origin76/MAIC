@@ -258,7 +258,82 @@ w_i^t = \mathbb{I}_{\text{valid}}\left(0.2+0.8\max(u_i^t,c_i^t)\right)
 
 然而，对 Huber leverage 的 128 局通信隔离评估给出了更严格的负结果：三 seed 平均 normal 胜率为 $0.4375$，no\_attack 为 $0.4427$，normal $-$ no\_attack 的平均差值为 $-0.52\%$；gate\_open 平均为 $0.4505$，仅比 normal 高 $1.30\%$，且主要来自单个 seed 的小幅波动。同时，gate\_closed 与 no\_attack 在三个 seed 上完全一致，说明诊断开关链路是可信的。由此可见，Huber leverage 证明了“通信可以触达动作 logits”，但没有证明“通信触达的是有因果价值的动作决策”。
 
-综合来看，silence budget 仍是本文当前最稳健的攻击通信主线；soft alignment、gate floor 与 Huber leverage 的连续诊断共同表明，继续调节路由采样、通信强度或全局动作杠杆都不是最有效方向。后续算法改进应转向更细粒度的通信因果性建模：识别本地策略不确定、局部目标冲突或本地决策错误的状态，并让通信只在这些具有潜在因果价值的状态中介入，而不是全局性地让通信“更强”。
+\subsection{从动作层杠杆到状态条件化曝光}
+\esubsection{From Action-Level Leverage to State-Conditioned Exposure}
+
+上述负结果推动本文进一步重新审视 attack communication 的核心瓶颈。至此已经可以排除几类早期解释：其一，问题不再是 attack stream 完全沉默；其二，问题也不再是 attack attention 完全死亡；其三，问题甚至不再只是门控过低，因为 Huber leverage 已经证明通信 residual 可以稳定进入动作 logits。真正剩下的问题变成了：通信是否在 \emph{该介入的状态} 中改变动作，以及这种改变是否沿着正确方向发生。
+
+基于这一判断，本文后续主线从“继续加大全局通信作用力”转向“只在 peer-local conflict 且 local 较不确定的状态中增强 exposure”。这一主线可以概括为
+\begin{equation}
+\text{signsplit}
+\rightarrow
+\text{v4 mild fused exposure}
+\rightarrow
+\text{v5 margin-near exposure}
+\rightarrow
+\text{v5b stable exposure}.
+\end{equation}
+
+\textbf{Signsplit baseline：通信存在，但几乎不改变动作。} 以 \texttt{v6\_attack\_top2\_selective\_silencebudget\_signsplit\_correction} 为代表的 signsplit 配置已经具备健康的非沉默通信结构：三 seed 平均 no-comm 概率约为 $0.0019$，conflict rate 约为 $0.1130$，说明 peer intent 既存在，也并非总与 local target 重合。然而 peer-vs-local diagnostic 进一步显示，fused follow-peer on conflict rate 为 $0.0000$，fused stay-local on conflict rate 为 $1.0000$，effective delta 仅约 $6\times10^{-4}$。这说明 signsplit 阶段的核心问题不是通信没有被路由出来，而是 communication-to-action leverage 近乎为零。
+
+\textbf{V4 mild fused exposure：第一次把通信稳定推进到动作层。} 为修复 signsplit 的零杠杆问题，本文在 v4 中保留 silence budget，并加入轻量的 peer-conflict margin leverage 与 mild fused exposure。其 peer-local 诊断均值显示：gate mean 从 signsplit 的 $0.0728$ 提升至 $0.5792$，effective delta 从 $0.0006$ 跃升至 $0.0922$，attack-only follow-peer on conflict rate 提升至 $0.0352$，fused follow-peer on conflict rate 也首次达到 $0.0171$。这说明通信已经不再停留在“有路由但碰不到动作”的阶段，而是第一次以可测量的方式进入了 attack action circuit。然而，v4 的 fused stay-local on conflict rate 仍高达 $0.9805$，说明最终决策仍以 local policy 为主导。
+
+\textbf{V5 margin-near exposure：让 fused exposure 更偏向 local 不确定状态。} 在 v4 的基础上，本文进一步引入 local-confidence-aware 的 fused weighting。其核心思想不是盲目让通信更强，而是让 fused 路径在 local margin 更小、local top-1 置信度更低的状态中承受更强的 peer-conflict 压力。相较 v4，这一步使通信介入从“全局 mild exposure”转向“margin-near exposure”，并在部分 seed 上提升了 fused follow-peer 的频率。然而，v5 也暴露出新的不稳定性：最小权重过低时，一些 seed 会重新掉回低 exposure 状态，说明状态条件化虽然是对的方向，但 exposure floor 仍然过弱。
+
+\textbf{V5b stable exposure：将最小不确定性权重从 $0.2$ 提升到 $0.4$。} 为回答“v5 的不稳定是否只是因为 fused exposure floor 太低”这一更窄的问题，本文进一步构造 v5b：保留 margin-near / uncertainty-aware fused exposure 框架，仅将最小不确定性权重由 $0.2$ 提升到 $0.4$，同时保持
+\begin{equation}
+\texttt{attack\_peer\_conflict\_fused\_local\_conf\_max}=0.90.
+\end{equation}
+这一步不引入新机制，只测试一个非常小的稳定化修正：在 local 高置信状态中仍保留一部分最小 fused exposure，避免某些 seed 因 fused weight 过低而重新退化到“通信碰不到动作”的 regime。
+
+\subsection{V5b 主线结果与边界}
+\esubsection{V5b Mainline Results and Their Boundary}
+
+v5b 的三 seed 通信统计如表 \ref{tab:v5b_three_seed} 所示。
+
+\begin{table}[htbp]
+    \centering
+    \caption{v5b 三个 seed 的末段通信统计}
+    \label{tab:v5b_three_seed}
+    \begin{tabular}{|l|c|c|c|c|c|c|c|}
+        \hline
+        Seed & final win & last5 win & gate last5 & no-comm last5 & entropy last5 & effective delta last5 & fused follow peer last5 \\
+        \hline
+        1 & 0.6250 & 0.5625 & 0.5364 & 0.0106 & 0.4453 & 0.0930 & 0.0068 \\
+        \hline
+        2 & 0.9375 & 0.7250 & 0.4416 & 0.0069 & 0.4476 & 0.0740 & 0.0243 \\
+        \hline
+        3 & 0.6250 & 0.6375 & 0.5642 & 0.0075 & 0.4356 & 0.1077 & 0.0113 \\
+        \hline
+        Mean & 0.7292 & 0.6417 & 0.5141 & 0.0083 & 0.4428 & 0.0916 & 0.0141 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+这张表有三个关键含义。第一，v5b 维持了健康的非沉默结构：no-comm last5 仅约 $0.0083$。第二，v5b 把 exposure 拉回了强而稳定的区间：gate last5 约为 $0.51$，effective delta last5 约为 $0.092$，基本回到 v4 的强 exposure regime。第三，v5b 并没有把系统推向极端 peer-dominant 决策：fused follow peer last5 只有 $0.0141$，说明最终策略仍然保守。
+
+与 v5 相比，v5b 更像是一个“通信调稳”版本，而不是一个“让通信更激进地主导决策”的版本。其三 seed 平均 final win 从 $0.6042$ 提升至 $0.7292$，last5 win 从 $0.5750$ 提升至 $0.6417$，同时 gate、effective delta 与 fused weight 都明显上升。换言之，v5b 的主要贡献不是让通信更频繁地推翻 local decision，而是让 communication-to-action exposure 不再在不同 seed 上忽强忽弱。
+
+在这一主线上，\texttt{v5b seed2} 是最适合作为论文单条主线展示的 checkpoint。其 final win 达到 $0.9375$，last5 win 为 $0.7250$，last5 return 为 $17.2901$；更重要的是，它的通信参数处于非常干净的区间：gate last5 为 $0.4416$，no-comm last5 为 $0.0069$，entropy last5 为 $0.4476$，effective delta last5 为 $0.0740$。这说明该 checkpoint 并不是靠沉默逃逸、门控饱和或残差爆炸换来的高分，而是在 moderate-gate、healthy-entropy、non-silent 的 regime 中取得了最强结果。
+
+然而，\texttt{v5b seed2} 同时也明确暴露出本文当前最重要的边界。其 fused follow-peer last5 虽提升至 $0.0243$，attack-only follow-peer last5 为 $0.0400$，但 fused stay-local last5 仍高达 $0.9751$，fused log-prob margin 仍显著为负。这意味着通信已经稳定进入动作层，但绝大多数冲突状态下最终攻击决策仍由 local policy 主导。换句话说，v5b 修复的是 exposure bottleneck，而不是最终的 causal decision-change bottleneck。
+
+基于这一点，本文选择 \texttt{v5b seed2} 作为 paper mainline 的原因并不是“它证明通信已经解决了动作层因果性”，而是它同时满足三个更适合作为论文主线的条件：其一，通信参数健康；其二，通信机制已经 operational at the action level；其三，剩余边界清晰可诊断。这比选择一个更激进但机制不干净的 checkpoint 更适合作为论文的核心叙事。
+
+\subsection{从 V5b 到后续因果修正的边界}
+\esubsection{Boundary Beyond V5b}
+
+在 v5b 之后，本文继续尝试了更直接的 bad-action correction 与 causal decision-change 修正，例如在保持 v5b 稳定 exposure 设定的基础上引入更强的 \texttt{bad-action decision change} 分支。其结果表明，仅继续增加 exposure 压力并不会自动把通信变成更好的因果决策器：某些 seed 的 gate 与 effective delta 虽然继续升高，但 final win、last5 win 以及 fused follow-peer 反而下降。这进一步佐证了当前主线的核心判断：更强的通信作用力本身并不是答案，状态选择才是答案。
+
+因此，围绕最新主线可以得出一个比“通信有效/无效”更细的结论：
+\begin{enumerate}
+    \item 本文已经修复了 attack communication 的沉默逃逸与零曝光问题；
+    \item 本文已经让通信 residual 以稳定、可测量的方式进入 attack action logits；
+    \item 但本文尚未让通信在大多数冲突状态中稳定跨越 local decision margin；
+    \item 因而当前未解的关键问题，不是 communication exposure，而是 causal decision change。
+\end{enumerate}
+
+综合来看，silence budget、peer-conflict margin leverage 与 uncertainty-aware fused exposure 共同构成了本文当前最稳的攻击通信主线；而 soft alignment、gate floor、Huber leverage 以及更激进的 bad-action 修正则共同划出了该主线的能力边界。后续算法改进应继续围绕状态条件化的通信因果性建模展开：识别本地策略不确定、peer-local target 冲突、或本地即将执行错误攻击的状态，并让通信只在这些具有潜在因果价值的状态中介入，而不是全局性地让通信“更强”。
 
 \section{本章小结}
 \esection{Chapter Summary}
@@ -267,6 +342,8 @@ w_i^t = \mathbb{I}_{\text{valid}}\left(0.2+0.8\max(u_i^t,c_i^t)\right)
 
 针对冷启动通信失败，本文进行了 8 组递进式实验，涵盖 IGG、固定门控、通信 warm-up、门控退火和 hidden-state fusion 等多种策略。实验揭示了门控-学习率同构性这一关键洞察，说明门控值在功能上等价于通信学习率。
 
-进一步，本文对攻击通信流进行了系统性机制修复：从 top1 死亡到 top2 软路由、选择性熵正则、沉默预算，最终通过意图对齐将三 seed 平均峰值提升至 $0.746$。通信隔离评估实验首次提供了攻击通信有效性的因果证据，但后续 soft alignment、gate floor 与 Huber leverage 诊断也表明，通信性能提升并不等价于执行期通信因果贡献的稳定增强。特别是 Huber leverage 证明通信可以触达动作 logits，却仍未带来稳定的 normal $-$ no\_attack 正向增益，说明后续改进应转向状态条件化的通信因果性建模。
+进一步，本文对攻击通信流进行了系统性机制修复：从 top1 死亡到 top2 软路由、选择性熵正则、沉默预算，最终通过意图对齐将三 seed 平均峰值提升至 $0.746$。在此基础上，本文进一步完成了从 signsplit 到 v4、v5、v5b 的动作层主线推进：先证明通信不再沉默，再证明通信第一次稳定进入动作电路，最后通过 margin-near / uncertainty-aware fused exposure 把跨 seed 的 communication exposure 调稳。其中 \texttt{v5b seed2} 作为当前最适合作为论文主线的 checkpoint，展示了健康的通信参数、稳定的动作层 exposure，以及“causal decision-change 尚未彻底解决”的清晰边界。
+
+这些结果共同表明，通信性能提升并不等价于执行期通信因果贡献的稳定增强。特别是 Huber leverage 与后续更激进的 causal 修正都证明：即使通信已经触达动作 logits，若缺少更精细的状态选择，它仍未必会在正确的时刻沿正确方向改变最终决策。因此，后续改进应继续转向状态条件化的通信因果性建模。
 
 这些发现共同确立了本文的核心论点：轻量、语义明确的通信机制能够产生真实协同价值，但该价值的释放依赖于 Backbone 稳定性、动作层融合方向以及介入状态选择的共同满足。当 Backbone 本身处于训练动力学的不稳定期，或通信残差在不具因果价值的状态中被全局放大时，通信支路会放大优化噪声。这一 insight 将通信研究的焦点从"设计更强的通信"转向"设计更可控、更因果化的通信"。

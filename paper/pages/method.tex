@@ -382,6 +382,124 @@ M_i^t \rho_i^t
 \end{equation}
 其中 $\eta$ 为损失权重，$\mu$ 为很小的 log-prob margin。该损失只在正优势攻击样本上施加作用：当某次攻击动作被 Critic 认为是有利动作时，通信融合策略至少不应比局部策略更不支持该动作。与直接抬高门控不同，该约束不强迫通信在所有状态中变强，而是给通信残差提供一个动作方向上的弱监督信号。
 
+\subsection{基于同伴冲突的边际杠杆约束}
+
+进一步的诊断表明，优势引导约束虽然能够让通信 residual 更稳定地触达动作 logits，但它并未直接回答一个更具体的问题：当本地策略与通信聚合出的同伴意图发生冲突时，通信是否能够在这些状态中提供有方向性的修正。为此，本文进一步引入 peer-conflict margin leverage。
+
+设局部攻击策略、仅攻击通信修正后的策略以及最终融合策略在时刻 $t$ 的 top-1 目标分别为
+\begin{equation}
+a_{i,\text{local}}^{\star}, \qquad
+a_{i,\text{att-only}}^{\star}, \qquad
+a_{i,\text{fused}}^{\star},
+\end{equation}
+设注意力聚合后的同伴攻击意图 top-1 目标为 $a_{i,\text{peer}}^{\star}$。当
+\begin{equation}
+a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}
+\end{equation}
+时，说明该状态存在 peer-local conflict。若此时同伴意图置信度足够高，则通信模块至少应在 logit 层面尝试缩小 peer 目标与 local 目标之间的决策间隔。
+
+令 $\tilde{\ell}_{i,\text{att-only}}^t$ 与 $\tilde{\ell}_{i,\text{fused}}^t$ 分别表示攻击通信支路单独注入和最终融合后的攻击 logits，定义两类 margin：
+\begin{equation}
+m_{i,\text{att-only}}^t =
+\tilde{\ell}_{i,\text{att-only}}^t(a_{i,\text{peer}}^{\star})
+-
+\tilde{\ell}_{i,\text{att-only}}^t(a_{i,\text{local}}^{\star}),
+\end{equation}
+\begin{equation}
+m_{i,\text{fused}}^t =
+\tilde{\ell}_{i,\text{fused}}^t(a_{i,\text{peer}}^{\star})
+-
+\tilde{\ell}_{i,\text{fused}}^t(a_{i,\text{local}}^{\star}).
+\end{equation}
+若这两个 margin 仍显著小于零，则说明通信虽然进入了动作层，但仍未接近跨越 local 决策边界。于是本文构造 Huber 风格的 margin leverage 约束：
+\begin{equation}
+L_{\text{peer-conflict}}^{\text{att-only}}
+=
+\eta_{\text{ao}}
+\frac{
+\sum_{t,i}
+\omega_i^t
+\mathcal{H}_{\beta}
+\left(
+\max(0,\mu-m_{i,\text{att-only}}^t)
+\right)
+}{
+\sum_{t,i}\mathbb{I}_{\text{valid}} + \epsilon
+},
+\end{equation}
+\begin{equation}
+L_{\text{peer-conflict}}^{\text{fused}}
+=
+\eta_{\text{fused}}
+\frac{
+\sum_{t,i}
+\bar{\omega}_i^t
+\mathcal{H}_{\beta}
+\left(
+\max(0,\mu-m_{i,\text{fused}}^t)
+\right)
+}{
+\sum_{t,i}\mathbb{I}_{\text{valid}} + \epsilon
+},
+\end{equation}
+其中 $\mathcal{H}_{\beta}(\cdot)$ 表示 Huber 惩罚，$\mu$ 为小 margin 目标，$\omega_i^t$ 与 $\bar{\omega}_i^t$ 分别对应 attack-only 与 fused 路径的状态权重。该设计与简单放大门控的区别在于：它只在 peer 与 local 真实冲突、且同伴意图具有足够支持时，要求通信沿着更明确的决策方向施加影响。
+
+\subsection{不确定性感知的融合曝光}
+
+仅靠 peer-conflict margin 仍可能过于激进。因为在许多状态下，本地策略的 top-1 目标已经高度自信，此时若强迫 fused policy 接近 peer target，反而可能破坏已有 Backbone 的局部正确行为。为此，本文进一步在 fused 路径上加入不确定性感知的 exposure weighting，使通信更偏向介入本地策略较不确定的状态。
+
+记局部攻击分布 top-1 概率为
+\begin{equation}
+c_{i,\text{local}}^t = \max_a \pi_{\text{local}}(a|o_i^t),
+\end{equation}
+并设一个局部置信度阈值 $c_{\max}$。则 fused 路径的不确定性权重定义为
+\begin{equation}
+u_i^t =
+w_{\min}
+\;+\;(1-w_{\min})
+\operatorname{clip}
+\left(
+\frac{c_{\max}-c_{i,\text{local}}^t}{c_{\max}},
+0,1
+\right),
+\end{equation}
+其中 $w_{\min}$ 为最小保留权重。于是 fused 路径最终使用
+\begin{equation}
+\bar{\omega}_i^t = \omega_i^t \cdot u_i^t.
+\end{equation}
+该设计的含义是：
+\begin{enumerate}
+    \item attack-only 路径继续在更广泛的冲突状态上学习“朝 peer 方向修正”；
+    \item fused 路径只在 local 置信度较低的状态中承受更强的 peer-conflict 压力；
+    \item 即使 local 很自信，也仍保留最小权重 $w_{\min}$，避免训练信号完全消失。
+\end{enumerate}
+
+这种设计将问题从“让通信更强”转化为“让通信在更该介入的状态里更强”，从而把 exposure 的增强和状态选择耦合起来。
+
+\subsection{Peer-vs-Local 因果诊断}
+
+为了判断通信失败究竟发生在消息生成、路由、门控还是最终决策跨越这几个环节中的哪一步，本文在常规隔离评估之外进一步引入 peer-vs-local causal diagnostic。该诊断在每个可攻击状态下同时记录三种 top-1 目标：
+\begin{equation}
+a_{i,\text{local}}^{\star}, \qquad
+a_{i,\text{peer}}^{\star}, \qquad
+a_{i,\text{fused}}^{\star},
+\end{equation}
+并特别关注冲突状态
+\begin{equation}
+a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
+\end{equation}
+
+在这些状态中，本文统计以下指标：
+\begin{enumerate}
+    \item \textbf{conflict rate}：同伴意图与本地目标冲突的频率；
+    \item \textbf{attack-only follow-peer rate}：仅攻击通信修正路径是否会转向 peer target；
+    \item \textbf{fused follow-peer rate}：最终融合策略是否会转向 peer target；
+    \item \textbf{fused stay-local rate}：最终融合策略是否仍停留在 local target；
+    \item \textbf{effective delta}：门控与 residual 联合作用后在动作层形成的有效扰动强度。
+\end{enumerate}
+
+这组诊断的价值在于，它把“通信是否存在”与“通信是否真的改变了最终决策”拆成了两个不同问题。若 peer intent 已经存在、冲突率非零、同伴置信度也较高，而 fused follow-peer 仍接近零，则说明当前瓶颈不再是路由死亡或沉默逃逸，而是通信尚未跨过 local decision margin。
+
 \section{通信隔离评估方法论}
 \esection{Communication Isolation Evaluation}
 
