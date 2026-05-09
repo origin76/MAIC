@@ -30,7 +30,7 @@
 \section{全文工作总结}
 \esection{Summary of This Thesis}
 
-本文围绕基于信息交互的多智能体强化学习算法展开研究，重点关注 CTDE 框架下信息交互机制的设计、失效模式及改进方向。针对现有通信方法在消息语义、通信效率和融合策略方面存在的问题，本文以 MAPPO 为主干算法，首先构建了相对可靠的 vanilla Backbone，然后在其基础上系统探索了多种轻量通信结构，并对攻击通信流进行了系统性的机制修复。
+本文围绕基于信息交互的多智能体强化学习算法展开研究，重点关注 CTDE 框架下信息交互机制的设计、失效模式及改进方向。针对现有通信方法在消息语义、通信效率和融合策略方面存在的问题，本文以 MAPPO 为主干算法，首先构建了相对可靠的 vanilla 主干基线（Backbone），然后在其基础上系统探索了多种轻量通信结构，并对攻击通信流进行了系统性的机制修复。
 
 在方法层面，本文形成了一个较为清晰的设计思路：通信模块不应简单扩大消息容量或替代整个局部策略，而应以轻量、残差、受约束和面向协作子空间的方式接入。围绕这一思路，本文先后实现并比较了最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合以及攻移双流通信等结构。在此基础上，针对攻击通信流注意力死亡这一关键问题，本文提出了三点机制修复：top-2 软路由、upper-only 选择性熵正则和沉默预算约束，最终通过意图对齐将跨种子平均峰值胜率提升至 $0.746$。随后，本文又将研究重点从“通信是否存在”推进到“通信能否稳定进入动作层并在该介入的状态中介入”，依次构造了 signsplit、v4 mild fused exposure、v5 margin-near exposure 与 v5b stable exposure 等版本。进一步的边界诊断表明，继续平滑对齐样本选择、单纯提高通信门控强度，或全局性鼓励通信改变动作 logits，均不能稳定增加执行期通信贡献，后续改进需要转向状态条件化的通信因果性建模。
 
@@ -53,7 +53,7 @@
 
 第六，通信触达动作并不等价于通信具有因果收益。signsplit 的 peer-vs-local diagnostic 已经显示：peer intent 存在、conflict rate 非零、但 fused follow-peer 几乎为零；v4 和 v5b 则进一步表明，通信可以被稳定推进到 attack action logits，并以可测量的 effective delta 影响动作层。特别是 \texttt{v5b seed2} 展示了当前最干净的主线状态：no-comm 近零、gate 适中、effective delta 稳定为正、attention entropy 健康，同时 final win 达到 $0.9375$。然而，即使在这一主线 checkpoint 中，fused stay-local 仍接近 $0.98$，说明通信虽然已经 operational at the action level，却仍未频繁跨过 local decision margin。
 
-第七，更强的 exposure 本身不是答案。gate floor 实验将攻击门控从约 $0.071$ 提升至 $0.122$，有效 logit 扰动也约翻倍，但三 seed 最终平均胜率从 $0.667$ 下降至 $0.479$。进一步的 Huber advantage-guided leverage 虽将攻击门控提升至 $0.171$，并将有效扰动提升至约 $4.95\times10^{-3}$，但 128 局通信隔离评估中 normal $-$ no\_attack 的平均差值仍为 $-0.52\%$。这说明当前瓶颈不是通信没有被打开，也不只是通信没有改变动作，而是通信尚未学会在真正需要干预的状态中沿有利方向修正本地策略。换言之，本文已经较好地修复了 communication exposure bottleneck，但 causal decision-change bottleneck 仍未彻底解决。
+第七，更强的 exposure 本身不是答案。gate floor 实验将攻击门控从约 $0.071$ 提升至 $0.122$，有效 logit 扰动也约翻倍，但三 seed 最终平均胜率从 $0.667$ 下降至 $0.479$。进一步的 Huber advantage-guided leverage 虽将攻击门控提升至 $0.171$，并将有效扰动提升至约 $4.95\times10^{-3}$，但 128 局通信隔离评估中 normal $-$ no\_attack 的平均差值仍为 $-0.52\%$。这说明当前瓶颈不是通信没有被打开，也不只是通信没有改变动作，而是通信尚未学会在真正需要干预的状态中沿有利方向修正本地策略。换言之，本文已经较好地修复了通信曝光瓶颈（communication exposure bottleneck），但因果性决策改变瓶颈（causal decision-change bottleneck）仍未彻底解决。
 
 \section{后续工作展望}
 \esection{Future Work}

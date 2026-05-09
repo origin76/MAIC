@@ -8,8 +8,8 @@
 
 本文算法设计围绕如下三个目标展开。
 \begin{enumerate}
-    \item 构建一个足够稳定的 MAPPO Backbone，使策略网络能够在无通信条件下形成可信的局部微操能力；
-    \item 在不破坏 Backbone 的前提下，引入轻量、低风险、可解释的通信分支；
+    \item 构建一个足够稳定的 MAPPO 主干基线（Backbone），使策略网络能够在无通信条件下形成可信的局部微操能力；
+    \item 在不破坏主干基线（Backbone）的前提下，引入轻量、低风险、可解释的通信分支；
     \item 通过版本化设计逐步分析“传什么”“听谁的”和“如何融合”这三个核心问题。
 \end{enumerate}
 
@@ -41,7 +41,7 @@ h_i^t = \operatorname{GRU}(e_i^t, h_i^{t-1}).
 \subsection{集中式价值函数}
 \esubsection{Centralized Value Function}
 
-Critic 使用集中式输入进行价值估计。记训练阶段可用的集中信息为 $x^t$，则 centralized critic 定义为
+Critic 使用集中式输入进行价值估计。记训练阶段可用的集中信息为 $x^t$，则集中式 Critic（centralized critic）定义为
 \begin{equation}
 V_{\phi}(x^t) = f_{V}(x^t).
 \end{equation}
@@ -169,6 +169,36 @@ g_i^t = \sigma\!\left(f_g\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right)+b_g\rig
     \item \textbf{可解释}：优先传递具有明确物理意义的消息，例如动作意图或攻击偏置。
     \item \textbf{子空间融合}：通信最好只作用于真正需要协同的动作子空间，而不是替代整个局部策略。
 \end{enumerate}
+
+\subsection{执行期通信代价度量}
+\esubsection{Execution-Time Communication Cost}
+
+除了比较胜率与稳定性之外，本文还希望回答另一个问题：当前 strongest mainline 是否依赖于高带宽通信。为此，本文不直接使用网络参数量或训练期额外分支数作为通信开销，而是定义一个更贴近分布式执行阶段的 proxy，即每个 agent-step 的期望执行期通信维数
+\begin{equation}
+C_{\mathrm{exec}} = p_{\mathrm{comm}} \cdot k \cdot d_{\mathrm{exec}},
+\label{eq:comm_cost_exec}
+\end{equation}
+其中 $p_{\mathrm{comm}}$ 表示通信支路在当前 step 保持非沉默的概率，$k$ 表示该 step 实际激活的接收者数，$d_{\mathrm{exec}}$ 表示单条 sender-receiver 边在执行期真正送入决策支路的消息维度。
+
+式 \eqref{eq:comm_cost_exec} 的核心思想是，只统计“真正进入别的智能体决策过程的通信载体”，而不把 query、key、内部 latent 参数或训练期辅助损失都混入同一口径。这样可以统一比较三类常见情况：其一，dense all-to-all hidden-state broadcast，此时 $p_{\mathrm{comm}}=1$ 且 $k=N-1$；其二，带 top-$k$ 选择的稀疏通信，此时 $k \ll N-1$；其三，具有显式 no-comm token 或 hard gate 的 on-demand communication，此时 $p_{\mathrm{comm}}<1$。
+
+为了让不同方法更容易横向比较，本文进一步定义两种归一化代价。第一种是同消息维度下的拓扑归一化：
+\begin{equation}
+\rho_{\mathrm{topo}}
+=
+\frac{C_{\mathrm{exec}}}{(N-1)\cdot d_{\mathrm{exec}}}
+=
+\frac{p_{\mathrm{comm}}\cdot k}{N-1},
+\end{equation}
+它反映的是在给定单边消息维度时，方法是否通过选择性路由或沉默机制真正减少了激活边数。第二种是相对 $64$ 维稠密隐藏态广播的工程归一化：
+\begin{equation}
+\rho_{64}
+=
+\frac{C_{\mathrm{exec}}}{(N-1)\cdot 64},
+\end{equation}
+它用于回答“当前方法的执行期通信预算，相当于向全部队友广播 $64$ 维 hidden state 的多少比例”。
+
+需要强调的是，这一度量是执行期通信预算的 proxy，而不是总系统复杂度的完整刻画。它不包含训练期 mutual information、额外推断网络或辅助损失带来的优化开销。因此，后文若将本文方法与 MAIC 一类队友建模方法进行比较，其含义应理解为“执行期通信载体的相对轻重”，而不是整个训练系统的总成本比较。
 
 \section{最小侵入通信}
 \esection{Minimally Invasive Communication}

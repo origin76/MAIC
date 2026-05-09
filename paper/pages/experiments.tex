@@ -40,7 +40,7 @@
 
 \subsection{Backbone 基线构建}
 
-在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 主线构建可靠 Backbone。经过 centralized critic、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，vanilla MAPPO 能够在该任务上稳定学习。
+在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 主线构建可靠主干基线（Backbone）。经过集中式 Critic（centralized critic）、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，vanilla MAPPO 能够在该任务上稳定学习。
 
 与此同时，实验发现 Backbone 训练存在显著的种子敏感性。在早期配置（entropy coefficient $c_e=0.02$）下，3 个种子的最终胜率分别为 $0.575$、$0.025$ 和 $0.025$，仅 seed 1 成功。通过将 $c_e$ 提升至 $0.03$ 并降低 critic 学习率至 $5\times10^{-4}$，成功率提升至 2/3（seed 1: $0.325$、seed 2: $0.025$、seed 3: $0.200$，均为 $2.5\times10^{6}$ 步处的测试胜率）。
 
@@ -316,9 +316,72 @@ v5b 的三 seed 通信统计如表 \ref{tab:v5b_three_seed} 所示。
 
 在这一主线上，\texttt{v5b seed2} 是最适合作为论文单条主线展示的 checkpoint。其 final win 达到 $0.9375$，last5 win 为 $0.7250$，last5 return 为 $17.2901$；更重要的是，它的通信参数处于非常干净的区间：gate last5 为 $0.4416$，no-comm last5 为 $0.0069$，entropy last5 为 $0.4476$，effective delta last5 为 $0.0740$。这说明该 checkpoint 并不是靠沉默逃逸、门控饱和或残差爆炸换来的高分，而是在 moderate-gate、healthy-entropy、non-silent 的 regime 中取得了最强结果。
 
-然而，\texttt{v5b seed2} 同时也明确暴露出本文当前最重要的边界。其 fused follow-peer last5 虽提升至 $0.0243$，attack-only follow-peer last5 为 $0.0400$，但 fused stay-local last5 仍高达 $0.9751$，fused log-prob margin 仍显著为负。这意味着通信已经稳定进入动作层，但绝大多数冲突状态下最终攻击决策仍由 local policy 主导。换句话说，v5b 修复的是 exposure bottleneck，而不是最终的 causal decision-change bottleneck。
+然而，\texttt{v5b seed2} 同时也明确暴露出本文当前最重要的边界。其 fused follow-peer last5 虽提升至 $0.0243$，attack-only follow-peer last5 为 $0.0400$，但 fused stay-local last5 仍高达 $0.9751$，fused log-prob margin 仍显著为负。这意味着通信已经稳定进入动作层，但绝大多数冲突状态下最终攻击决策仍由 local policy 主导。换句话说，v5b 修复的是通信曝光瓶颈（communication exposure bottleneck），而不是最终的因果性决策改变瓶颈（causal decision-change bottleneck）。
 
 基于这一点，本文选择 \texttt{v5b seed2} 作为 paper mainline 的原因并不是“它证明通信已经解决了动作层因果性”，而是它同时满足三个更适合作为论文主线的条件：其一，通信参数健康；其二，通信机制已经 operational at the action level；其三，剩余边界清晰可诊断。这比选择一个更激进但机制不干净的 checkpoint 更适合作为论文的核心叙事。
+
+\subsection{低通信代价主线与 Repo MAIC 对比}
+\esubsection{Low-Cost Mainline Versus the In-Repo MAIC}
+
+在明确 \texttt{v5b seed2} 是当前最适合作为论文主线的 checkpoint 之后，本文进一步关心一个更工程化的问题：这一主线是否依赖于较大的执行期通信预算。基于第三章定义的执行期通信代价
+\begin{equation}
+C_{\mathrm{exec}} = p_{\mathrm{comm}} \cdot k \cdot d_{\mathrm{exec}},
+\end{equation}
+本文对当前主线与本仓库内的 MAIC 实现进行了粗粒度对比，结果如表 \ref{tab:comm_cost_compare} 所示。
+
+\begin{table}[htbp]
+    \centering
+    \caption{SMAC \texttt{5m\_vs\_6m} 上执行期通信代价的粗粒度对比}
+    \label{tab:comm_cost_compare}
+    \begin{tabular}{|p{3.6cm}|p{3.8cm}|c|c|c|c|c|c|}
+        \hline
+        方法 & 路由形态 & $p_{\mathrm{comm}}$ & $k$ & $d_{\mathrm{exec}}$ & $C_{\mathrm{exec}}$ & $\rho_{\mathrm{topo}}$ & $\rho_{64}$ \\
+        \hline
+        本文 \texttt{v5b seed2} 攻击流 & top-2 selective + no-comm & 0.9931 & 2 & 8 & 15.9 & 0.4966 & 0.0621 \\
+        \hline
+        Repo MAIC & dense all-to-all targeted action bias & 1.0000 & 4 & 12 & 48.0 & 1.0000 & 0.1875 \\
+        \hline
+        稀疏 MAPPO 参考配置 & top-3 sparse comm & 1.0000 & 3 & 4 & 12.0 & 0.7500 & 0.0469 \\
+        \hline
+        64 维稠密广播参考线 & dense all-to-all hidden-state broadcast & 1.0000 & 4 & 64 & 256.0 & 1.0000 & 1.0000 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+表 \ref{tab:comm_cost_compare} 中，本文主线只统计攻击通信流，因为当前最关键的机制修复、隔离评估与因果诊断都集中发生在该分支上。对 \texttt{v5b seed2} 而言，末段日志给出 attack no-comm probability 约为 $0.0069$，因此
+\begin{equation}
+p_{\mathrm{comm}} \approx 1 - 0.0069 = 0.9931.
+\end{equation}
+结合其 top-$2$ 选择性路由和 $8$ 维攻击消息，可得
+\begin{equation}
+C_{\mathrm{exec}}^{\text{ours, attack}}
+\approx
+0.9931 \times 2 \times 8
+\approx 15.9.
+\end{equation}
+这意味着在给定单边消息维度的情况下，当前主线只激活了约一半潜在通信边；若进一步以“向其余 $4$ 个队友广播 $64$ 维 hidden state”的稠密方案为参照，则其归一化代价仅为
+\begin{equation}
+\rho_{64}^{\text{ours, attack}}
+=
+\frac{15.9}{4\times 64}
+\approx 6.2\%.
+\end{equation}
+
+相比之下，仓库内 MAIC 的低维 latent 并不能直接视为执行期通信带宽。其配置中的 `latent\_dim=8` 主要服务于内部 teammate modeling，而在执行期真正送入 peer 决策支路的是一个对每个 sender-receiver 对应的动作偏置向量。结合仓库实现可知，MAIC 最终返回的是局部 $Q$ 值与 dense attention 加权 action-bias 的和，因此在 \texttt{5m\_vs\_6m} 上，更合适的执行期消息维度口径是 $d_{\mathrm{exec}} = n_{\mathrm{actions}} = 12$。同时，该实现不包含 top-$k$ 稀疏选择，也不包含显式 no-comm token，因此其执行期通信代价可近似写为
+\begin{equation}
+C_{\mathrm{exec}}^{\text{MAIC}}
+=
+1 \times 4 \times 12
+= 48.
+\end{equation}
+
+据此可得一个对本文叙事十分重要的结论：在相同 \texttt{5m\_vs\_6m} 环境上，当前 \texttt{v5b seed2} 攻击流的执行期通信预算大约仅为 repo MAIC 的三分之一：
+\begin{equation}
+\frac{15.9}{48} \approx 33.1\%.
+\end{equation}
+因此，本文 strongest mainline 的优势并不是依赖于高带宽 all-to-all hidden-state communication，而是在显著更低的执行期通信代价下，通过选择性路由、沉默预算和动作层残差注入，获得了稳定的通信机制与当前最强的单条主线结果。
+
+当然，这一对比也应当谨慎理解。首先，表 \ref{tab:comm_cost_compare} 比较的是执行期通信载体，而不是训练期总复杂度，因此没有把 MAIC 的 mutual information 目标和额外推断网络开销计入同一张表。其次，本文当前填写的是攻击流主线预算，而不是完整双流总预算。换言之，这张表支持的不是“本文整体系统绝对最省”，而是一个更克制但更可靠的结论：当前最强主线是在 genuinely low-cost communication regime 中取得的，且其低成本不是表面上的“latent 很小”，而是来自 top-$k$ 稀疏激活、低维消息和受控非沉默概率共同作用的结果。
 
 \subsection{从 V5b 到后续因果修正的边界}
 \esubsection{Boundary Beyond V5b}
