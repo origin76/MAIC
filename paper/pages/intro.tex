@@ -31,63 +31,37 @@
 \section{研究背景与意义}
 \esection{Research Background and Motivation}
 
-强化学习通过智能体与环境的交互，实现以累积回报最大化为目标的策略学习，已在游戏决策、机器人控制和资源调度等领域取得显著进展。随着实际应用场景逐步从单智能体转向多主体协同，传统强化学习方法在信息不完整、决策耦合和信用分配等方面面临新的挑战，多智能体强化学习（Multi-Agent Reinforcement Learning, MARL）由此成为近年来的重要研究方向。
+强化学习已在博弈、机器人与调度优化等任务中取得显著进展，
+但当决策主体从单智能体扩展到多智能体后，局部观测、动作耦合与信用分配会同时带来新的困难。
+协作场景下，每个智能体通常只能看到环境的局部切片，若缺乏额外协同机制，就很难形成高质量的联合策略，
+因此多智能体强化学习（Multi-Agent Reinforcement Learning, MARL）成为当前智能决策研究的重要方向。
 
-在协作型多智能体任务中，多个智能体需要基于有限局部观测完成整体目标。此类问题通常具有如下特点：其一，环境是部分可观测的，单个智能体无法仅凭自身信息做出全局最优决策；其二，多个智能体的动作相互影响，策略更新具有强耦合性；其三，任务绩效往往依赖群体协同而非单体最优，因此需要在局部自主性与整体协同性之间取得平衡。为缓解这些困难，集中式训练、分布式执行（Centralized Training and Decentralized Execution, CTDE）范式逐渐成为 MARL 的主流框架\cite{lowe2017maddpg,foerster2018coma,rashid2018qmix,yu2021mappo}。
-
-在 CTDE 范式下，训练阶段可以利用全局状态或更多集中信息辅助价值估计，而执行阶段仍要求各智能体依据局部信息独立决策。这一范式虽然增强了训练过程中的信息利用能力，但对于复杂协作任务而言，单纯依赖集中式 Critic（centralized critic）仍难以完全弥补执行期的信息缺失。因此，如何在保持去中心化执行的前提下，让智能体学习有效的信息交互机制，成为多智能体强化学习中的核心问题之一\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional}。
-
-然而，现有工作往往更关注“消息能否生成”“路由是否合理”或“门控是否打开”，而较少直接分析通信是否真正稳定地进入最终动作决策过程。换言之，一个通信模块可能在表示层和路由层都看似工作正常，却仍然无法在动作层产生可测量影响。本文关注的正是这一更细的问题：在协作场景下，智能体应当传递什么信息、与谁通信，以及如何让接收到的信息以受控方式进入局部决策，并在真正需要协同的状态中发挥作用。
+为兼顾训练阶段的全局信息利用与执行阶段的可部署性，
+集中式训练、分布式执行（Centralized Training and Decentralized Execution, CTDE）
+已成为主流范式，相关代表方法包括 MADDPG、COMA、QMIX 和 MAPPO 等\cite{lowe2017maddpg,foerster2018coma,rashid2018qmix,yu2021mappo}。
+然而，CTDE 并没有消除执行期的信息缺口，
+因此显式通信仍是协作型 MARL 的关键问题，相关研究已经从 CommNet、DIAL 一类早期可微通信框架发展到 TarMAC、ATOC 等更具选择性的注意力通信方法\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional}。
+本文关注的核心不只是“是否建立了通信链路”，而是通信能否以较低代价稳定进入动作决策，并在真正需要协同时改变局部策略。
 
 \section{国内外研究现状}
 \esection{Related Research Status}
 
-现有研究大致沿着两条主线展开。第一条主线关注协作决策框架本身，从独立学习逐步走向 CTDE、值分解和 actor-critic 等方法，以缓解多智能体训练中的非平稳性与信用分配问题\cite{tan1993iql,sunehag2018vdn,rashid2018qmix,lowe2017maddpg,foerster2018coma,yu2021mappo}。第二条主线关注执行期信息缺失带来的协作瓶颈，通过显式通信机制补充局部观测无法覆盖的状态信息或队友意图\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional,yuan2022maic,singh2018ic3net}。
+现有研究主要沿两条路线展开。第一条路线关注协作决策框架本身，从 IQL 到 VDN、QMIX，再到 MADDPG、COMA 和 MAPPO，核心目标是缓解多智能体训练中的非平稳性与信用分配问题\cite{tan1993iql,sunehag2018vdn,rashid2018qmix,lowe2017maddpg,foerster2018coma,yu2021mappo}。第二条路线直接面向执行期信息不足，通过显式通信来补充局部观测之外的状态信息、行为意图或激励信号，代表工作包括 CommNet、DIAL、TarMAC、ATOC、IC3Net 和 MAIC\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional,singh2018ic3net,yuan2022maic}。
 
-从通信研究的演进看，相关工作已经从早期的广播式或全连接消息传播，逐渐发展到注意力路由、队友建模、门控通信和图结构学习等更复杂的设计。然而，这些工作也普遍面临几个共性难点：其一，消息常常缺乏明确物理语义，容易退化为难以解释的隐式特征；其二，路由与门控即使在统计上“活着”，也未必意味着通信已经稳定影响最终动作；其三，通信支路若以过强或过粗放的方式耦合进策略主干，反而可能破坏原本有效的局部决策能力。
-
-因此，本文的切入点并不是继续单纯扩大通信容量，而是转向一个更受控、也更容易被机制诊断的问题设定：以强 MAPPO 主干基线（Backbone）为起点，让通信以轻量残差形式进入有限动作子空间，并重点分析通信究竟失败在沉默逃逸、路由退化、门控关闭，还是 communication-to-action leverage（通信到动作杠杆）不足。关于相关工作的详细综述，第二章将从协作决策基础、交互拓扑演进、消息语义深化、交互时机调控和架构自动化搜索等方面展开系统讨论。
+总体上，相关研究已经从广播式通信发展到注意力路由、门控稀疏通信和队友建模，但仍存在两个突出问题：其一，通信支路常常难以稳定进入动作层并真正改变决策；其二，增加通信能力往往伴随更高带宽、更强训练不稳定性和更弱可解释性。基于这一观察，本文不追求继续扩大通信容量，而是更关注低通信代价条件下，通信如何以受控方式进入局部动作修正过程。
 
 \section{本文研究内容与主要工作}
 \esection{Research Content and Main Contributions}
 
-围绕基于信息交互的多智能体强化学习算法，本文的研究内容与主要工作可以概括为以下四点。
+本文以 MAPPO 为基础框架，研究低通信代价条件下的显式协同问题。整体思路分为两个阶段：首先训练稳定的无通信主干策略，再从性能较强的模型断点出发进行通信热启动微调，以分离主干能力与通信增益。围绕这一思路，本文逐步设计了最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合和攻移双流通信等结构，并通过沉默预算、top-$k$ 选择与残差融合控制通信规模。
 
-第一，本文构建了一条明确的两阶段（two-phase）研究主线，而不是在不稳定 Backbone 上直接叠加通信。Phase 1 先回到 vanilla MAPPO 主线，逐步完成集中式 Critic（centralized critic）、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，构建出可靠主干基线（Backbone）；Phase 2 再从强 Backbone checkpoint 出发进行通信 warm-start 微调。这样的两阶段设计使本文能够将“Backbone 自身训练动力学”与“通信模块带来的额外作用”区分开来，并最终形成以 \texttt{v5b seed2} 为代表的最强 paper mainline。
-
-第二，本文强调的不是“更大通信容量”，而是“更低通信代价下的有效协同”。为此，本文围绕低带宽、低增益、零初始化和残差融合的总体原则，设计并实现了多种轻量通信结构，包括最小侵入通信、锐化路由通信、动作意图共享、攻击子空间融合以及攻移双流通信。在当前主线中，攻击流采用 $d_{\text{msg}}=8$ 的消息维度和 top-$2$ 选择性路由，并引入沉默预算（silence budget）抑制无效通信，使得通信始终工作在一个低带宽、稀疏、受控的 regime 中。
-
-第三，本文给出了一个可与其他方法对比的通信代价度量。若记单条通信边上传输的消息维度为 $d_{\text{msg}}$，每步最多激活的通信边数为 $k$，而通信保持非沉默的概率为 $p_{\text{comm}}=1-p_{\text{no-comm}}$，则本文将单位 agent-step 上的期望通信代价定义为
-\begin{equation}
-C_{\text{comm}} = p_{\text{comm}} \cdot k \cdot d_{\text{msg}}.
-\end{equation}
-其中，若一个方法采用全连接广播，则其通信代价可写为
-\begin{equation}
-C_{\text{dense}} = (N-1)\cdot d_{\text{msg}},
-\end{equation}
-因此可进一步构造归一化代价
-\begin{equation}
-\rho_{\text{comm}}=\frac{C_{\text{comm}}}{C_{\text{dense}}}.
-\end{equation}
-相比仅使用 $p_{\text{comm}}\times d_{\text{msg}}$ 的写法，上述定义把“消息是否发送”“每次发多大消息”“同时对多少个对象发生通信”三个因素统一纳入，从而更适合跨方法比较。以本文最关键的攻击通信主线为例，\texttt{v5b seed2} 末段满足 $d_{\text{msg}}=8$、$k=2$、$p_{\text{no-comm}}\approx0.0069$，因此
-\begin{equation}
-C_{\text{comm}}^{\text{attack}} \approx (1-0.0069)\times2\times8 \approx 15.9.
-\end{equation}
-若与向全部 $N-1=4$ 个队友广播 $64$ 维隐藏状态的稠密通信相比，其代价为
-\begin{equation}
-C_{\text{dense}}^{64} = 4\times64=256,
-\end{equation}
-则当前主线攻击通信的归一化代价仅约为
-\begin{equation}
-\rho_{\text{comm}}^{\text{attack}}\approx \frac{15.9}{256}\approx 6.2\%.
-\end{equation}
-这说明本文的 strongest mainline 并不是靠高带宽 all-to-all hidden-state communication 获得的，而是在显著更低的通信代价下实现的。
-
-第四，本文不仅关注性能结果，还通过机制诊断解释“为什么这条低代价主线有效、又卡在什么地方”。在攻击通信流修复过程中，本文从 top-1 硬路由逐步推进到 top-2 软路由、选择性熵正则和沉默预算，再到 peer-conflict margin leverage 与不确定性感知的融合曝光（uncertainty-aware fused exposure），最终形成 \texttt{v5b\_margin\_near\_exposure\_minw04} 这一稳定主线。其中 \texttt{v5b seed2} 取得了当前实验线上最强的单条主线结果，同时保持了健康的通信参数：no-comm 近零、gate 适中、effective delta 稳定为正。进一步地，本文通过通信隔离评估与 peer-vs-local 因果诊断（peer-vs-local causal diagnostic）直接测量执行期边际贡献，指出当前最关键的未解问题并非“通信有没有被打开”，而是 communication-to-action leverage 是否足够稳定，以及 causal decision change（因果性决策改变）是否真正发生。也就是说，本文在低通信代价下较好地修复了通信曝光瓶颈，但动作层因果性决策改变仍未被彻底解决。
+在此基础上，本文形成了一条“基于双流 MAPPO 主干的轻量残差通信主线”：攻击流采用选择性路由并保留“禁止通信”选项约束，移动流采用更高稀疏度的按需通信，两条通信支路共同以残差方式进入局部动作修正。为评价这一主线，本文进一步构建了执行期通信代价度量、通信隔离评估以及“队友建议对比本地决策”的因果诊断。实验结果表明，该方法已经能够在较低总通信预算下获得稳定性能，但通信在冲突状态中持续触发决策改变的问题仍未被彻底解决。
 
 \section{论文结构安排}
 \esection{Organization of the Thesis}
 
-本文共分为五章，各章内容安排如下。
-
-第一章为绪论，介绍研究背景、国内外研究现状、本文研究内容与结构安排。第二章介绍多智能体强化学习与信息交互的相关理论基础，包括 CTDE、MAPPO 与典型通信方法。第三章给出本文基于 MAPPO 的轻量信息交互算法设计思路与主要结构。第四章对实验设置、基线构建以及不同通信结构的实验结果进行系统分析。第五章总结全文工作，并给出后续可继续推进的研究方向。
+本文共分为五章。第一章介绍研究背景、研究现状、本文研究内容与结构安排；
+第二章综述多智能体强化学习与信息交互的相关理论基础；
+第三章给出基于 MAPPO 的轻量通信算法设计；
+第四章报告实验设置、对比结果与机制诊断；
+第五章总结全文并讨论后续研究方向。
