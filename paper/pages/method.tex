@@ -1,5 +1,5 @@
-\chapter{协作决策主干与统一通信框架}
-\echapter{Collaborative Decision Backbone and Unified Communication Framework}
+\chapter{通信框架设计}
+\echapter{Communication Framework Design}
 
 \section{问题定义与设计目标}
 \esection{Problem Definition and Design Objectives}
@@ -21,17 +21,10 @@
 \subsection{局部策略网络}
 \esubsection{Local Policy Network}
 
-本文使用共享参数的循环策略网络作为 Actor。对任意智能体 $i$，在时刻 $t$ 的局部表示首先由编码器和循环单元提取：
+本文使用共享参数的循环策略网络作为 Actor。对任意智能体 $i$，在时刻 $t$ 的局部隐藏状态、局部动作 logits 与执行期策略统一写为
 \begin{equation}
-e_i^t = f_{\text{enc}}(o_i^t), \qquad
-h_i^t = \operatorname{GRU}(e_i^t, h_i^{t-1}).
-\end{equation}
-随后通过策略头输出局部动作 logits：
-\begin{equation}
-\ell_i^{\text{local}} = f_{\pi}(h_i^t),
-\end{equation}
-并据此定义分布式执行阶段的局部策略
-\begin{equation}
+h_i^t = \operatorname{GRU}(f_{\text{enc}}(o_i^t), h_i^{t-1}),\qquad
+\ell_i^{\text{local}} = f_{\pi}(h_i^t),\qquad
 \pi_{\theta}(a_i^t|o_i^t,h_i^{t-1})=
 \operatorname{Softmax}\!\left(\ell_i^{\text{local}}\right).
 \end{equation}
@@ -45,78 +38,42 @@ Critic 使用集中式输入进行价值估计。记训练阶段可用的集中�
 \begin{equation}
 V_{\phi}(x^t) = f_{V}(x^t).
 \end{equation}
-在实际实现中，$x^t$ 可由全局状态、联合观测或经过拼接的集中式特征构成。该设计的目的在于缓解部分可观测与多智能体策略耦合带来的估值困难。
+在实际实现中，$x^t$ 可由全局状态、联合观测或经过拼接的集中式特征构成。该设计的目的在于缓解部分可观测与多智能体策略耦合带来的估值困难，这也是 CTDE 框架中常见的稳定化做法\cite{foerster2018coma,lowe2017maddpg,yu2021mappo}。
 
-基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数：
-\begin{equation}
-\delta_t = r_t + \gamma V_{\phi}(x^{t+1}) - V_{\phi}(x^t),
-\end{equation}
-\begin{equation}
-\hat{A}_t = \sum_{l=0}^{T-t-1} (\gamma \lambda)^l \delta_{t+l},
-\end{equation}
-其中 $\gamma$ 为折扣因子，$\lambda$ 为 GAE 系数。
+基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数\cite{DBLP:journals/corr/SchulmanMLJA15}，并在后续策略优化中使用该优势估计提供更平滑的策略梯度信号。
 
 \subsection{MAPPO 优化目标}
 \esubsection{MAPPO Objective}
 
-本文采用 PPO 风格的截断策略目标优化共享 Actor。记新旧策略的概率比为
-\begin{equation}
-r_t(\theta) =
-\frac{\pi_{\theta}(a_t|o_t,h_{t-1})}
-{\pi_{\theta_{\text{old}}}(a_t|o_t,h_{t-1})},
-\end{equation}
-则策略损失为
-\begin{equation}
-L_{\text{policy}}(\theta)=
-\mathbb{E}_t \left[
-\min\left(
-r_t(\theta)\hat{A}_t,
-\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat{A}_t
-\right)
-\right].
-\end{equation}
-
-考虑到价值函数过快更新也会导致训练不稳定，本文进一步采用 PPO-style value clipping：
-\begin{equation}
-V_t^{\text{clip}} =
-V_{\phi_{\text{old}}}(x_t) +
-\operatorname{clip}
-\left(
-V_{\phi}(x_t)-V_{\phi_{\text{old}}}(x_t),
--\epsilon_v,\epsilon_v
-\right),
-\end{equation}
-\begin{equation}
-L_{\text{value}}(\phi)=
-\mathbb{E}_t \left[
-\max\left(
-(V_{\phi}(x_t)-R_t)^2,
-(V_t^{\text{clip}}-R_t)^2
-\right)
-\right],
-\end{equation}
-其中 $R_t$ 表示回报目标。最终优化目标写为
+本文采用 PPO 风格的截断策略目标优化共享 Actor\cite{schulman2017ppo,yu2021mappo}，并对价值函数使用裁剪式回归目标。记策略损失、价值损失与熵正则分别为 $L_{\text{policy}}$、$L_{\text{value}}$ 和 $L_{\text{entropy}}$，则最终优化目标写为
 \begin{equation}
 L =
 L_{\text{policy}}
  - c_e L_{\text{entropy}}
  + c_v L_{\text{value}},
 \end{equation}
-其中 $L_{\text{entropy}}$ 为策略熵正则项，$c_e$ 与 $c_v$ 分别为熵系数和价值损失系数。
+其中 $c_e$ 与 $c_v$ 分别为熵系数和价值损失系数。更具体的 PPO 裁剪形式与 GAE 展开采用标准实现，不在此重复推导。
 
 在实现层面，本文还引入了 active masks、proper time-limit、线性学习率衰减以及基于近似 KL 的 early stop 机制，从而显著增强了主干训练的稳定性。
+
+本文将 MAPPO 作为协作决策主干，核心原因正在于上述优化目标与本文通信问题高度匹配\cite{yu2021mappo,schulman2017ppo}。一方面，集中式价值评估器与分布式策略网络的组合能够同时兼顾训练期协作估值和执行期局部决策，适合作为“局部观测决策 + 有限通信修正”的基础结构；另一方面，PPO 截断、价值裁剪以及一系列稳定化技巧能够有效抑制策略更新过快带来的震荡，使通信分支可以附着在相对平稳的主干策略上学习。由于本文后续通信模块都通过动作层残差直接修正 logits，主干越稳定，通信效应就越容易被隔离、比较和解释。因此，MAPPO 在本文中不仅是一个性能较强的基线方法，更是支撑后续“通信如何作用于动作决策”分析的统一优化底座。
 
 \section{统一通信建模框架}
 \esection{Unified Communication Modeling Framework}
 
+图 \ref{fig:unified_framework} 给出了本文协作决策主干与统一通信分支的整体关系。其核心思路是：局部策略首先形成稳定的主干决策，通信模块再以消息构造、选择性路由和残差注入的方式提供附加协同信息，而训练阶段的集中式价值评估器仅用于提供更稳定的优化信号。
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{0.98\textwidth}{!}{\input{figures/ch3_unified_framework.tex}}
+    \caption{协作决策主干与统一通信框架总览}
+    \label{fig:unified_framework}
+\end{figure}
+
 \subsection{消息构造与路由计算}
 \esubsection{Message Construction and Routing}
 
-本文后续所有通信版本都建立在同一抽象框架之上。对智能体 $i$ 而言，首先从本地隐藏状态或其派生特征中构造待发送表示 $z_i^t$：
-\begin{equation}
-z_i^t = f_{\text{msg}}(h_i^t).
-\end{equation}
-随后分别构造 query、key 和 value：
+本文后续所有通信版本都建立在同一抽象框架之上。对智能体 $i$ 而言，首先从本地隐藏状态或其派生特征中构造待发送表示 $z_i^t=f_{\text{msg}}(h_i^t)$，再构造 query、key 和 value\cite{10.5555/3295222.3295349}：
 \begin{equation}
 q_i^t = W_q h_i^t,\qquad
 k_j^t = W_k z_j^t,\qquad
@@ -136,19 +93,14 @@ v_j^t = W_v z_j^t.
 m_i^t=\sum_{j \in \mathcal{N}_i^t}\alpha_{ij}^t v_j^t.
 \end{equation}
 
+上述基于注意力的选择性路由形式，与多智能体通信中“按状态决定听谁、向谁通信”的基本思想是一致的\cite{das2019tarmac,jiang2018attentional}。
+
 这一标准化表达有助于统一理解不同版本之间的差异：有些版本主要修改 $z_i^t$ 的物理语义，有些版本主要修改 $\alpha_{ij}^t$ 的稀疏性，有些版本则主要修改 $m_i^t$ 进入策略的方式。
 
 \subsection{残差式融合}
 \esubsection{Residual Fusion}
 
-为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路。设 $\operatorname{LN}(\cdot)$ 表示归一化层，通信修正量与门控分别定义为
-\begin{equation}
-\Delta_i^t = f_{\Delta}\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right),
-\end{equation}
-\begin{equation}
-g_i^t = \sigma\!\left(f_g\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right)+b_g\right),
-\end{equation}
-其中 $[\cdot,\cdot]$ 表示向量拼接，$\sigma(\cdot)$ 为 Sigmoid 函数，$b_g$ 为门控偏置。最终动作 logits 为
+为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路\cite{He_2016_CVPR}。设 $\operatorname{LN}(\cdot)$ 表示层归一化\cite{DBLP:journals/corr/BaKH16}，$[\cdot,\cdot]$ 表示向量拼接，通信修正量 $\Delta_i^t$ 与门控 $g_i^t$ 共同由 $[h_i^t,\operatorname{LN}(m_i^t)]$ 决定，最终动作 logits 为
 \begin{equation}
 \tilde{\ell}_i^t
 =
@@ -158,6 +110,8 @@ g_i^t = \sigma\!\left(f_g\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right)+b_g\rig
 其中 $\lambda$ 为通信增益系数。
 
 式 \eqref{eq:general_residual_fusion} 是全文通信设计的核心。它保证了当通信尚未学好时，策略仍可退化为纯局部 MAPPO；而当通信确实携带高价值协同信息时，门控和残差修正会逐步将其注入决策过程。
+
+进一步地，本文并不采用“主干与通信从零同时学习”的冷启动接入方式，而是先训练无通信的 vanilla MAPPO 主干，再在其基础上接入通信分支并进行热启动微调。这样做的原因与残差式融合的设计目标一致：当主干策略尚未形成稳定局部行为时，通信支路既缺乏可利用的动作语义参照，也容易把额外噪声直接注入策略更新；而当主干已经具备可靠的局部微操能力后，通信模块所需学习的就不再是“共同形成整个策略”，而是“在已有策略上做条件化修正”。因此，两阶段训练能够同时降低优化耦合、保护主干能力，并为后续在同一模型检查点下开展通信对照实验提供更清晰的比较基础。
 
 \subsection{通信设计原则}
 \esubsection{Communication Design Principles}
@@ -173,16 +127,16 @@ g_i^t = \sigma\!\left(f_g\!\left([h_i^t,\operatorname{LN}(m_i^t)]\right)+b_g\rig
 \subsection{执行期通信代价度量}
 \esubsection{Execution-Time Communication Cost}
 
-除了比较胜率与稳定性之外，本文还希望回答另一个问题：当前 strongest mainline 是否依赖于高带宽通信。为此，本文不直接使用网络参数量或训练期额外分支数作为通信开销，而是定义一个更贴近分布式执行阶段的 proxy，即每个 agent-step 的期望执行期通信维数
+除了比较胜率与稳定性之外，本文还希望回答另一个问题：当前主线方法是否依赖于高带宽通信。为此，本文不直接使用网络参数量或训练期额外分支数作为通信开销，而是定义一个更贴近分布式执行阶段的度量指标，即每个智能体步上的期望执行期通信维数
 \begin{equation}
 C_{\mathrm{exec}} = p_{\mathrm{comm}} \cdot k \cdot d_{\mathrm{exec}},
 \label{eq:comm_cost_exec}
 \end{equation}
-其中 $p_{\mathrm{comm}}$ 表示通信支路在当前 step 保持非沉默的概率，$k$ 表示该 step 实际激活的接收者数，$d_{\mathrm{exec}}$ 表示单条 sender-receiver 边在执行期真正送入决策支路的消息维度。
+其中 $p_{\mathrm{comm}}$ 表示通信支路在当前决策步保持非沉默的概率，$k$ 表示该决策步实际激活的接收者数，$d_{\mathrm{exec}}$ 表示单条发送者到接收者边在执行期真正送入决策支路的消息维度。
 
-式 \eqref{eq:comm_cost_exec} 的核心思想是，只统计“真正进入别的智能体决策过程的通信载体”，而不把 query、key、内部 latent 参数或训练期辅助损失都混入同一口径。这样可以统一比较三类常见情况：其一，dense all-to-all hidden-state broadcast，此时 $p_{\mathrm{comm}}=1$ 且 $k=N-1$；其二，带 top-$k$ 选择的稀疏通信，此时 $k \ll N-1$；其三，具有显式 no-comm token 或 hard gate 的 on-demand communication，此时 $p_{\mathrm{comm}}<1$。
+式 \eqref{eq:comm_cost_exec} 的核心思想是，只统计“真正进入其他智能体决策过程的通信载体”，而不把 query、key、内部潜变量参数或训练期辅助损失都混入同一口径。这样可以统一比较三类常见情况：其一，稠密的全连接隐藏状态广播，此时 $p_{\mathrm{comm}}=1$ 且 $k=N-1$；其二，带 top-$k$ 选择的稀疏通信，此时 $k \ll N-1$；其三，具有显式禁止通信标记或硬门控的按需通信，此时 $p_{\mathrm{comm}}<1$。
 
-对于本文的攻移双流通信，进一步采用逐流求和的总预算定义。若攻击流和移动流的执行期通信代价分别为
+对于本文的双流通信，进一步采用逐流求和的总预算定义。若攻击流和移动流的执行期通信代价分别为
 \begin{equation}
 C_{\mathrm{attack}} = p_{\mathrm{attack}}\cdot k_{\mathrm{attack}}\cdot d_{\mathrm{attack}},
 \end{equation}
@@ -194,43 +148,18 @@ C_{\mathrm{move}} = p_{\mathrm{move}}\cdot k_{\mathrm{move}}\cdot d_{\mathrm{mov
 C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
 \label{eq:comm_cost_total}
 \end{equation}
-这一写法的好处在于，它既允许分别分析 attack stream 与 move stream 的机制角色，也能在与单通道方法比较时给出一个完整的 overall communication budget。
+这一写法的好处在于，它既允许分别分析攻击流与移动流的机制角色，也能在与单通道方法比较时给出一个完整的总体通信预算。
 
-为了让不同方法更容易横向比较，本文进一步定义两种归一化代价。第一种是同消息维度下的拓扑归一化：
-\begin{equation}
-\rho_{\mathrm{topo}}
-=
-\frac{C_{\mathrm{exec}}}{(N-1)\cdot d_{\mathrm{exec}}}
-=
-\frac{p_{\mathrm{comm}}\cdot k}{N-1},
-\end{equation}
-它反映的是在给定单边消息维度时，方法是否通过选择性路由或沉默机制真正减少了激活边数。第二种是相对 $64$ 维稠密隐藏态广播的工程归一化：
-\begin{equation}
-\rho_{64}
-=
-\frac{C_{\mathrm{exec}}}{(N-1)\cdot 64},
-\end{equation}
-它用于回答“当前方法的执行期通信预算，相当于向全部队友广播 $64$ 维 hidden state 的多少比例”。
+为了让不同方法更容易横向比较，本文进一步使用两种归一化口径：同消息维度下的拓扑归一化 \(\rho_{\mathrm{topo}}=C_{\mathrm{exec}}/((N-1)\cdot d_{\mathrm{exec}})=p_{\mathrm{comm}}k/(N-1)\)，以及相对 $64$ 维稠密隐藏状态广播的工程归一化 \(\rho_{64}=C_{\mathrm{exec}}/((N-1)\cdot 64)\)。前者反映选择性路由或沉默机制对激活边数的压缩程度，后者用于回答当前方法的执行期通信预算相当于全连接 $64$ 维广播的多少比例。
 
-需要强调的是，这一度量是执行期通信预算的 proxy，而不是总系统复杂度的完整刻画。它不包含训练期 mutual information、额外推断网络或辅助损失带来的优化开销。因此，后文若将本文方法与 MAIC 一类队友建模方法进行比较，其含义应理解为“执行期通信载体的相对轻重”，而不是整个训练系统的总成本比较。
+需要强调的是，这一度量是执行期通信预算的近似刻画，而不是总系统复杂度的完整表征。它不包含训练期互信息目标、额外推断网络或辅助损失带来的优化开销。因此，后文若将本文方法与 MAIC 一类队友建模方法进行比较，其含义应理解为“执行期通信载体的相对轻重”，而不是整个训练系统的总成本比较。
 
 \section{协作决策与通信流程}
 \esection{Collaborative Decision and Communication Pipeline}
 
-综合以上设计，本文的协作决策与通信总体流程可概括为如下步骤：
-\begin{enumerate}
-    \item 每个智能体根据局部观测更新隐藏状态，并输出本地动作 logits；
-    \item 若启用通信分支，则从隐藏状态或其派生特征中构造待发送消息；
-    \item 通过注意力路由对邻居消息进行选择与聚合；
-    \item 将聚合消息通过门控和残差映射注入策略网络；
-    \item 使用 MAPPO 的策略损失、价值损失和熵正则联合优化 Actor 与 Critic。
-\end{enumerate}
-
-这一统一框架为后续轻量通信机制设计提供了共同底座，也使得不同通信版本的差异能够被清晰地归结为“消息语义、路由结构和融合位置”的变化。
+综合以上设计，本文的协作决策流程可以概括为：每个智能体先根据局部观测更新隐藏状态并形成本地动作 logits；若启用通信分支，则进一步构造消息、完成路由聚合，并通过门控残差注入对应动作子空间；训练阶段再使用 MAPPO 的策略损失、价值损失和熵正则联合优化 Actor 与 Critic。该统一流程为后续不同通信版本提供了共同底座，也使其差异能够被清晰归结为“消息语义、路由结构和融合位置”的变化。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章从问题定义出发，首先构建了带 centralized critic 的 vanilla MAPPO 主干，并使用 PPO-style policy clipping、value clipping、GAE 与一系列稳定化技巧提升训练鲁棒性。随后，本文提出统一通信框架，将消息设计、路由计算和残差融合纳入同一数学表达，并进一步给出执行期通信代价度量，为后续通信方法的比较提供统一口径。
-
-这一协作决策主干与统一通信框架共同构成了全文后续方法演化与实验分析的基础。下一章将在这一底座上，进一步展开轻量通信机制设计及其面向动作层修正的具体实现。
+本章构建了以 MAPPO 为核心的协作决策主干，并给出统一通信建模框架，将消息设计、路由计算、残差融合和执行期通信代价纳入同一表述。该框架既提供了后续方法设计的共同底座，也为不同通信版本的统一比较与机制分析建立了基本口径。

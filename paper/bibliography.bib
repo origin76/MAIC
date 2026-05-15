@@ -34,11 +34,52 @@
   year      = {2018}
 }
 
-@article{yu2021mappo,
-  title   = {The Surprising Effectiveness of PPO in Cooperative Multi-Agent Games},
-  author  = {Yu, Chao and Velu, Akash and Vinitsky, Eugene and Wang, Yu and Bayen, Alexandre and Wu, Yi},
-  journal = {arXiv preprint arXiv:2103.01955},
-  year    = {2021}
+@inproceedings{yu2021mappo,
+  author = {Yu, Chao and Velu, Akash and Vinitsky, Eugene and Gao, Jiaxuan and Wang, Yu and Bayen, Alexandre and Wu, Yi},
+  title = {The surprising effectiveness of PPO in cooperative multi-agent games},
+  year = {2022},
+  isbn = {9781713871088},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {Proximal Policy Optimization (PPO) is a ubiquitous on-policy reinforcement learning algorithm but is significantly less utilized than off-policy learning algorithms in multi-agent settings. This is often due to the belief that PPO is significantly less sample efficient than off-policy methods in multi-agent systems. In this work, we carefully study the performance of PPO in cooperative multi-agent settings. We show that PPO-based multi-agent algorithms achieve surprisingly strong performance in four popular multi-agent testbeds: the particle-world environments, the StarCraft multi-agent challenge, Google Research Football, and the Hanabi challenge, with minimal hyperparameter tuning and without any domain-specific algorithmic modifications or architectures. Importantly, compared to competitive off-policy methods, PPO often achieves competitive or superior results in both final returns and sample efficiency. Finally, through ablation studies, we analyze implementation and hyperparameter factors that are critical to PPO's empirical performance, and give concrete practical suggestions regarding these factors. Our results show that when using these practices, simple PPO-based methods can be a strong baseline in cooperative multi-agent reinforcement learning.},
+  booktitle = {Proceedings of the 36th International Conference on Neural Information Processing Systems},
+  articleno = {1787},
+  numpages = {14},
+  location = {New Orleans, LA, USA},
+  series = {NIPS '22}
+}
+
+@inproceedings{DBLP:journals/corr/SchulmanMLJA15,
+  author       = {John Schulman and
+                  Philipp Moritz and
+                  Sergey Levine and
+                  Michael I. Jordan and
+                  Pieter Abbeel},
+  editor       = {Yoshua Bengio and
+                  Yann LeCun},
+  title        = {High-Dimensional Continuous Control Using Generalized Advantage Estimation},
+  booktitle    = {4th International Conference on Learning Representations, {ICLR} 2016,
+                  San Juan, Puerto Rico, May 2-4, 2016, Conference Track Proceedings},
+  year         = {2016},
+  url          = {http://arxiv.org/abs/1506.02438},
+  timestamp    = {Thu, 25 Jul 2019 14:25:38 +0200},
+  biburl       = {https://dblp.org/rec/journals/corr/SchulmanMLJA15.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
+}
+
+@inproceedings{10.5555/3295222.3295349,
+  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, \L{}ukasz and Polosukhin, Illia},
+  title = {Attention is all you need},
+  year = {2017},
+  isbn = {9781510860964},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.0 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature.},
+  booktitle = {Proceedings of the 31st International Conference on Neural Information Processing Systems},
+  pages = {6000–6010},
+  numpages = {11},
+  location = {Long Beach, California, USA},
+  series = {NIPS'17}
 }
 
 @article{samvelyan19smac,
@@ -134,4 +175,42 @@
   author    = {Jiang, Jiechuan and Lu, Zongqing},
   booktitle = {Advances in Neural Information Processing Systems},
   year      = {2018}
+}
+
+@article{DBLP:journals/corr/BaKH16,
+  author       = {Lei Jimmy Ba and
+                  Jamie Ryan Kiros and
+                  Geoffrey E. Hinton},
+  title        = {Layer Normalization},
+  journal      = {CoRR},
+  volume       = {abs/1607.06450},
+  year         = {2016},
+  url          = {http://arxiv.org/abs/1607.06450},
+  eprinttype   = {arXiv},
+  eprint       = {1607.06450},
+  timestamp    = {Tue, 23 Jul 2019 17:33:23 +0200},
+  biburl       = {https://dblp.org/rec/journals/corr/BaKH16.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
+}
+
+@inproceedings{10.5555/3045390.3045561,
+  author = {Martins, Andr\'{e} F. T. and Astudillo, Ram\'{o}n F.},
+  title = {From softmax to sparsemax: a sparse model of attention and multi-label classification},
+  year = {2016},
+  publisher = {JMLR.org},
+  abstract = {We propose sparsemax, a new activation function similar to the traditional softmax, but able to output sparse probabilities. After deriving its properties, we show how its Jacobian can be efficiently computed, enabling its use in a network trained with backpropagation. Then, we propose a new smooth and convex loss function which is the sparsemax analogue of the logistic loss. We reveal an unexpected connection between this new loss and the Huber classification loss. We obtain promising empirical results in multi-label classification problems and in attention-based neural networks for natural language inference. For the latter, we achieve a similar performance as the traditional softmax, but with a selective, more compact, attention focus.},
+  booktitle = {Proceedings of the 33rd International Conference on International Conference on Machine Learning - Volume 48},
+  pages = {1614–1623},
+  numpages = {10},
+  location = {New York, NY, USA},
+  series = {ICML'16}
+}
+
+@InProceedings{He_2016_CVPR,
+  author = {He, Kaiming and Zhang, Xiangyu and Ren, Shaoqing and Sun, Jian},
+  title = {Deep Residual Learning for Image Recognition},
+  booktitle = {Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  month = {June},
+  year = {2016},
+  pages = {770-778}
 }

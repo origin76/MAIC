@@ -1,16 +1,16 @@
-\chapter{轻量通信机制设计与动作层修正}
-\echapter{Lightweight Communication Mechanism Design and Action-Level Refinement}
+\chapter{通信机制设计}
+\echapter{Communication Mechanism Design}
 
 \section{最小侵入通信}
 \esection{Minimally Invasive Communication}
 
-最小侵入通信的目标是回答最基础的问题：在几乎不改动 learner、critic 和 PPO 主流程的前提下，通信适配器能否挂接到强 Backbone 上并稳定训练。由于此时本文尚未确认通信分支在当前 Backbone 上的数值稳定性，因此该算法的设计选择是极度克制的，包括单头、低带宽、零初始化投影以及较小残差增益。
+最小侵入通信的目标是回答最基础的问题：在几乎不改动学习器、价值评估器和 PPO 主流程的前提下，通信适配器能否挂接到强主干上并稳定训练。由于此时本文尚未确认通信分支在当前主干上的数值稳定性，因此该算法的设计选择是极度克制的，包括单头、低带宽、零初始化投影以及较小残差增益。
 
 在这一版本中，发送消息可以近似写为
 \begin{equation}
 z_i^t = W_m h_i^t,
 \end{equation}
-随后按照统一通信框架计算注意力权重与聚合消息，并通过式 \eqref{eq:general_residual_fusion} 注入局部策略。需要强调的是，该适配器的重点并不在于提升通信表达能力，而在于控制通信支路的风险暴露，使其能够以“附着模块”的形式被 Backbone 吸收。
+随后按照统一通信框架计算注意力权重与聚合消息，并通过式 \eqref{eq:general_residual_fusion} 注入局部策略。需要强调的是，该适配器的重点并不在于提升通信表达能力，而在于控制通信支路的风险暴露，使其能够以“附着模块”的形式被主干吸收。
 
 因此，该算法的理论意义在于建立一个安全起点：如果连最小侵入通信都无法稳定工作，则后续更复杂的语义设计和路由设计都缺乏讨论基础。
 
@@ -19,7 +19,7 @@ z_i^t = W_m h_i^t,
 
 最小侵入通信的主要局限在于：即使通信分支不会立刻破坏主干，路由也很容易停留在“谁都听一点”的高熵平均状态。这种情况下，聚合消息更像多个邻居特征的模糊平均，而不是某个关键协作者的明确信号。锐化路由通信因此将改进重点放在路由选择性上。
 
-从统一框架角度看，锐化路由通信的变化主要体现在对 $\alpha_{ij}^t$ 的约束增强，即通过更尖锐的注意力分布让少数高价值邻居获得更大权重。其本质是在不显著改变消息载体的前提下优化“听谁的”。也就是说，该算法仍然主要传递 hidden feature，但希望让消息来源更有选择性。
+从统一框架角度看，锐化路由通信的变化主要体现在对 $\alpha_{ij}^t$ 的约束增强，即通过更尖锐的注意力分布让少数高价值邻居获得更大权重。其本质是在不显著改变消息载体的前提下优化“听谁的”。也就是说，该算法仍然主要传递隐层特征，但希望让消息来源更有选择性。这种由平滑 softmax 分布转向更具稀疏性的注意力分配的思路，与稀疏注意力的一般动机是一致的\cite{10.5555/3045390.3045561}。
 
 与最小侵入通信相比，锐化路由通信的核心改进不是“传什么”，而是“不要平均地听所有人”。这为后续进一步讨论消息语义提供了过渡。
 
@@ -50,45 +50,18 @@ z_i^t = \operatorname{Softmax}\!\left(\ell_i^{\text{attack}}\right).
 
 虽然动作意图共享已经显著提升了消息语义，但其通信修正仍可能作用到较大范围的策略特征。为进一步增强可解释性，攻击子空间融合将融合位置限制到攻击子空间。换言之，该方法不再允许通信分支影响整个策略输出，而只允许其在“打谁”这一协作最关键的决策子空间内发挥作用。
 
-设本地 logits 拆分为
-\begin{equation}
-\ell_i^{\text{local}}=
-\left[
-\ell_i^{\text{move}},
-\ell_i^{\text{attack}}
-\right],
-\end{equation}
-则攻击子空间融合仅对攻击部分进行修正：
-\begin{equation}
-\Delta_i^{\text{att}}=
-f_{\Delta,\text{att}}
-\left(
-[h_i^t,\operatorname{LN}(m_i^{\text{att}})]
-\right),
-\end{equation}
-\begin{equation}
-g_i^{\text{att}}=
-\sigma
-\left(
-f_{g,\text{att}}
-\left(
-[h_i^t,\operatorname{LN}(m_i^{\text{att}})]
-\right)
-+ b_{\text{att}}
-\right),
-\end{equation}
+设本地 logits 拆分为 \(\ell_i^{\text{local}}=[\ell_i^{\text{move}},\ell_i^{\text{attack}}]\)。攻击子空间融合仅对攻击部分进行修正：
 \begin{equation}
 \tilde{\ell}_i^{\text{attack}}=
-\ell_i^{\text{attack}}+\lambda_{\text{att}}g_i^{\text{att}}\Delta_i^{\text{att}}.
-\end{equation}
-最终输出写为
-\begin{equation}
+\ell_i^{\text{attack}}+\lambda_{\text{att}}g_i^{\text{att}}\Delta_i^{\text{att}},
+\qquad
 \tilde{\ell}_i=
 \left[
 \ell_i^{\text{move}},
 \tilde{\ell}_i^{\text{attack}}
 \right].
 \end{equation}
+其中 \(g_i^{\text{att}}\) 与 \(\Delta_i^{\text{att}}\) 由本地隐藏状态和攻击聚合消息共同决定。
 
 这一设计使通信模块的作用被明确限定为“帮助集火”，而移动等局部微操行为仍主要由本地策略主导。因此，攻击子空间融合的主要价值并不只是性能变化，更在于其方法可解释性显著增强。它将“通信如何影响策略”从黑箱级别压缩到了一个可以清晰描述的动作子空间内。
 
@@ -97,39 +70,31 @@ f_{g,\text{att}}
 
 在攻击子空间融合的基础上，本文进一步提出：攻击协同与移动协同不应由同一消息承载。对于微操任务而言，“打谁”和“怎么走”是两类性质不同的决策，前者更接近目标一致性问题，后者则更接近局部拓扑协调问题。因此，攻移双流通信将通信结构拆分为攻击流与移动流。
 
-攻击流与攻击子空间融合类似，主要用于集火偏置；移动流则写为
-\begin{equation}
-\Delta_i^{\text{mov}}=
-f_{\Delta,\text{mov}}
-\left(
-[h_i^t,\operatorname{LN}(m_i^{\text{mov}})]
-\right),
-\end{equation}
-\begin{equation}
-g_i^{\text{mov}}=
-\sigma
-\left(
-f_{g,\text{mov}}
-\left(
-[h_i^t,\operatorname{LN}(m_i^{\text{mov}})]
-\right)
-+ b_{\text{mov}}
-\right),
-\end{equation}
+图 \ref{fig:dualstream_structure} 展示了攻移双流通信的总体结构。两条通信支路共享同一主干隐藏状态，但分别承担攻击协同与移动协同的不同任务，并最终以残差形式进入各自对应的动作子空间。
+
+需要说明的是，本文当前主线配置中攻击流与移动流均取 $k=2$。二者在表述上之所以分别写作“Top-$2$ 软选择”和“稀疏选择”，并非因为超参数不同，而是因为两条支路的设计重点不同：攻击流强调在两个候选同伴之间保留可微的软分配，以避免 $k=1$ 时退化为近似硬选择；移动流则强调仅保留少数高价值连接，以抑制高熵平均通信。
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{0.98\textwidth}{!}{\input{figures/ch4_dualstream_structure.tex}}
+    \caption{攻移双流通信结构示意图}
+    \label{fig:dualstream_structure}
+\end{figure}
+
+攻击流与攻击子空间融合类似，主要用于集火偏置；移动流则采用与之同构的残差修正：
 \begin{equation}
 \tilde{\ell}_i^{\text{move}}=
-\ell_i^{\text{move}}+\lambda_{\text{mov}}g_i^{\text{mov}}\Delta_i^{\text{mov}}.
-\end{equation}
-最终双流融合结果为
-\begin{equation}
+\ell_i^{\text{move}}+\lambda_{\text{mov}}g_i^{\text{mov}}\Delta_i^{\text{mov}},
+\qquad
 \tilde{\ell}_i=
 \left[
 \tilde{\ell}_i^{\text{move}},
 \tilde{\ell}_i^{\text{attack}}
 \right].
 \end{equation}
+其中 \(g_i^{\text{mov}}\) 与 \(\Delta_i^{\text{mov}}\) 由移动聚合消息决定。
 
-然而，实验进一步表明，移动协同比攻击协同更容易退化为高熵平均，因此攻移双流通信在移动流中引入了 top-1 或 top-$k$ 风格的硬稀疏路由。若记硬稀疏算子为 $\mathcal{H}(\cdot)$，则有
+然而，实验进一步表明，移动协同比攻击协同更容易退化为高熵平均，因此攻移双流通信在移动流中引入了 top-1 或 top-$k$ 风格的硬稀疏路由。该设计与稀疏注意力所强调的“只保留少数高价值连接”的思想相一致\cite{10.5555/3045390.3045561}。移动路由并不依赖额外监督信号，而是通过移动残差对移动动作对数几率的修正效果，经由 PPO 策略梯度端到端学习。若记硬稀疏算子为 $\mathcal{H}(\cdot)$，则有
 \begin{equation}
 \bar{\alpha}_{ij}^t = \mathcal{H}(\alpha_{ij}^t),
 \qquad
@@ -141,19 +106,28 @@ m_i^{\text{mov}}=\sum_{j\in \mathcal{N}_i^t}\bar{\alpha}_{ij}^t v_j^t.
 \section{攻击通信流的机制修正}
 \esection{Mechanism Refinement for Attack Communication}
 
-在攻移双流通信的基础上，诊断实验揭示了一个关键问题：攻击通信流的注意力熵在所有 warm-start 配置中均为 $0.0$。这意味着攻击注意力完全退化，始终硬选同一个路由目标，没有学到任何有意义的路由选择。这个问题在 top-$k=1$ 时是结构性的：softmax 退化为 one-hot 分布，且缺乏梯度信号告知注意力“应该选谁”。
+在攻移双流通信的基础上，攻击通信流仍面临一个核心困难：通信即使进入攻击支路，也未必能够稳定形成有效的路由选择、稳定的非沉默结构以及对最终攻击决策具有方向性的修正。为此，本文不再把攻击通信视为单一模块，而是将其重构为一个分层修正结构：首先通过路由修正机制避免注意力退化与无意义平均；其次通过消息层约束抑制沉默逃逸并增强攻击意图一致性；最后通过动作层杠杆机制，使通信不仅“存在”，而且能够在合适状态中沿正确方向影响攻击决策。
 
-为解决该问题，本文对攻击通信流进行了递进式机制修复，包括以下几个关键步骤。
+为便于整体理解，图 \ref{fig:attack_refinement_stack} 对攻击通信流的修正主线进行了分层概括。可以看到，本文并不是通过单一技巧解决全部问题，而是将路由修正、消息约束和动作层杠杆依次叠加，使攻击通信逐步从“可连接”推进到“可利用”。
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{0.95\textwidth}{!}{\input{figures/ch4_attack_refinement_stack.tex}}
+    \caption{攻击通信流机制修正栈}
+    \label{fig:attack_refinement_stack}
+\end{figure}
+
+据此，本文最终形成的攻击通信修正主线由六个互补部件组成：Top-2 软路由、选择性熵正则、沉默预算、意图对齐、优势引导的动作杠杆，以及基于同伴冲突和本地不确定性的状态条件化融合约束。其中，前四者主要负责“让通信可路由、可持续、可表达”，后两者主要负责“让通信真正作用于动作决策”。下面分别说明各设计的功能定位及其必要性。
 
 \subsection{Top-$2$ 软路由修正}
 \esubsection{Top-$2$ Soft Routing Refinement}
 
-将攻击通信的 top-$k$ 从 $1$ 改为 $2$，使攻击流在两个队友之间进行软分配。该步骤成功将攻击注意力熵从 $0$ 提升至约 $\ln(2)\approx0.693$，但注意力也随之退化为“均匀听两人”，尚未形成真正的选择性。
+Top-$2$ 软路由的作用，是先从结构上解除攻击流在 $k=1$ 情况下的退化约束。若仅保留单一接收目标，softmax 很容易退化为近似 one-hot 的硬选择，攻击通信便难以形成可学习的路由分配。将 top-$k$ 从 $1$ 扩展为 $2$ 后，攻击流至少能够在两个候选队友之间形成可微的软分配，从而为后续的选择性学习保留必要自由度。
 
 \subsection{选择性熵正则}
 \esubsection{Selective Entropy Regularization}
 
-为防止攻击注意力重新退化为均匀分布，引入 upper-only 攻击注意力熵正则。设攻击注意力权重为 $\alpha^{\text{att}}_{ij}$，则攻击注意力熵定义为
+仅有 Top-$2$ 软路由仍不足以保证通信真正具有选择性，因为注意力可能进一步退化为高熵平均分配。为此，本文引入上界式攻击注意力熵正则。设攻击注意力权重为 $\alpha^{\text{att}}_{ij}$，则攻击注意力熵定义为
 \begin{equation}
 H^{\text{att}}_i = -\sum_{j\in\mathcal{N}_i} \alpha^{\text{att}}_{ij} \log \alpha^{\text{att}}_{ij},
 \end{equation}
@@ -161,33 +135,46 @@ H^{\text{att}}_i = -\sum_{j\in\mathcal{N}_i} \alpha^{\text{att}}_{ij} \log \alph
 \begin{equation}
 L_{\text{ent}}^{\text{att}} = w_e \cdot \max(0, \bar{H}^{\text{att}} - H_{\text{target}})^2,
 \end{equation}
-其中 $w_e$ 为正则系数，$H_{\text{target}}$ 为目标熵，$\bar{H}^{\text{att}}$ 为批内平均攻击注意力熵。该设计仅在熵过高时施加惩罚，低于目标时不干预，从而允许注意力自主学出选择性。
+其中 $w_e$ 为正则系数，$H_{\text{target}}$ 为目标熵，$\bar{H}^{\text{att}}$ 为批内平均攻击注意力熵。该设计仅在熵过高时施加惩罚，低于目标时不干预，从而避免把攻击注意力重新推回均匀分布，并保留其自主形成选择性的空间。
 
 \subsection{沉默预算约束}
 \esubsection{Silence Budget Constraint}
 
-实验发现，仅靠熵正则不足以诱导有用路由：攻击流会通过选择“无通信”token 来规避约束。为解决该问题，本文引入攻击无通信评分惩罚（silence budget）：
+仅靠熵正则仍不足以诱导有用路由，因为攻击流可以通过选择“无通信”标记绕开选择性约束。为此，本文引入攻击无通信评分惩罚（silence budget）：
 \begin{equation}
 s_{ij}^{\text{adj}} = s_{ij} - p_{\text{silence}} \cdot \mathbb{I}[j = \text{no-comm}],
 \end{equation}
-其中 $s_{ij}$ 为原始注意力评分，$p_{\text{silence}}$ 为沉默惩罚系数，$\mathbb{I}[\cdot]$ 为指示函数。该机制要求攻击流在选择 no-comm 时付出显式代价，从而避免通过沉默逃避学习。
+其中 $s_{ij}$ 为原始注意力评分，$p_{\text{silence}}$ 为沉默惩罚系数，$\mathbb{I}[\cdot]$ 为指示函数。该机制要求攻击流在选择无通信标记时付出显式代价，从而把攻击通信从“允许始终沉默”的结构，转变为“默认参与、但可在必要时沉默”的结构。
 
 \subsection{意图对齐约束}
 \esubsection{Intent Alignment Constraint}
 
-为进一步鼓励通信内容与协同行为对齐，本文引入攻击意图对齐损失。设智能体 $i$ 的攻击意图概率分布为 $p_i^{\text{att}}$，接收到的消息为 $m_i^{\text{att}}$，则对齐损失鼓励消息中隐含的攻击目标与接收方后续的集火行为一致。该损失在消息层面为通信提供了额外监督信号。
+为使攻击消息承载明确的协同语义，本文引入意图对齐约束。记 \(\hat{q}_i^t\) 为由真实通信权重聚合并结合可执行攻击掩码得到的同伴攻击意图分布，\(M_i^t\) 为同时满足通信质量、同伴置信度和可攻击性的有效样本掩码，\(\pi_{i,\text{fused}}^{\text{att},t}\) 为融合通信后的攻击分布，则意图对齐损失写为
+\begin{equation}
+L_{\text{align}}
+=
+\lambda_{\text{align}}
+\frac{
+\sum_{t,i}
+M_i^t\,
+D_{\mathrm{KL}}
+\left(
+\operatorname{sg}\!\left[\hat{q}_i^t\right]
+\middle\|
+\pi_{i,\text{fused}}^{\text{att},t}
+\right)
+}{
+\sum_{t,i} M_i^t + \epsilon
+}.
+\end{equation}
+该损失以同伴攻击意图作为监督目标，要求通信融合后的攻击分布在有效状态中靠近协同偏好；其中停止梯度操作用于避免目标分布反向塌缩，从而把学习重点保持在“接收端是否正确利用通信建议”上。
 
 \subsection{优势引导的动作杠杆机制}
 \esubsection{Advantage-Guided Action Leverage Mechanism}
 
-后续诊断表明，仅提高通信门控或残差强度并不能保证通信真正帮助决策。若通信残差 $\Delta_i^{\text{att}}$ 的方向尚未校准，强行增大 $g_i^{\text{att}}$ 只会把未校准扰动注入攻击 logits，反而破坏 Backbone 已有策略。因此，本文进一步将问题从“通信是否足够强”转化为“通信是否沿着有利动作方向改变策略”。
+即使路由和消息语义已经得到约束，通信仍可能停留在“存在但不改变动作”的状态。为此，本文首先在动作层引入优势引导的杠杆机制。其核心思想不是单纯放大通信强度，而是要求通信残差沿着有利动作方向改变策略：若某次攻击动作在当前优势估计下是有利的，则通信融合后的策略至少不应比局部策略更不支持该动作。
 
-设同一时刻下局部策略与攻击通信融合策略对已执行攻击动作 $a_i^t$ 的对数概率分别为
-\begin{equation}
-\log \pi_{\text{local}}(a_i^t), \qquad
-\log \pi_{\text{att-fused}}(a_i^t).
-\end{equation}
-定义通信带来的动作层对数概率增量为
+设同一时刻下局部策略与攻击通信融合策略对已执行攻击动作 $a_i^t$ 的对数概率差为
 \begin{equation}
 d_i^t =
 \log \pi_{\text{att-fused}}(a_i^t)
@@ -214,81 +201,47 @@ M_i^t \rho_i^t
 \sum_{t,i}M_i^t + \epsilon
 },
 \end{equation}
-其中 $\eta$ 为损失权重，$\mu$ 为很小的 log-prob margin。该损失只在正优势攻击样本上施加作用：当某次攻击动作被 Critic 认为是有利动作时，通信融合策略至少不应比局部策略更不支持该动作。
+其中 $\eta$ 为损失权重，$\mu$ 为很小的 log-prob margin。该损失只在正优势攻击样本上施加作用，因此它承担的不是“重写攻击目标”的功能，而是为通信提供一个最低限度的动作方向约束，使其先具备稳定触达攻击 logits 的能力。
 
 \subsection{基于同伴冲突的边际杠杆机制}
 \esubsection{Peer-Conflict Margin Leverage Mechanism}
 
-进一步的诊断表明，优势引导约束虽然能够让通信 residual 更稳定地触达动作 logits，但并未直接回答一个更具体的问题：当本地策略与通信聚合出的同伴意图发生冲突时，通信是否能够在这些状态中提供有方向性的修正。为此，本文进一步引入 peer-conflict margin leverage。
+在此基础上，本文进一步把动作层修正聚焦到更具协同价值的状态，即“同伴目标与本地目标冲突”的状态。优势引导约束虽然能够让通信残差更稳定地触达动作 logits，但并未直接要求通信在这些冲突状态中提供有方向性的修正。为此，本文进一步引入同伴冲突边际杠杆机制。
 
-设局部攻击策略、仅攻击通信修正后的策略以及最终融合策略在时刻 $t$ 的 top-1 目标分别为
+记本地策略 top-1 目标为 \(a_{i,\text{local}}^{\star}\)，同伴攻击意图 top-1 目标为 \(a_{i,\text{peer}}^{\star}\)。当二者不一致时，说明该状态存在“同伴目标与本地目标冲突”。若此时同伴意图置信度足够高，则通信模块至少应在 logit 层面缩小这两个目标之间的决策间隔。为此，本文定义统一的冲突边际
 \begin{equation}
-a_{i,\text{local}}^{\star}, \qquad
-a_{i,\text{att-only}}^{\star}, \qquad
-a_{i,\text{fused}}^{\star},
-\end{equation}
-设注意力聚合后的同伴攻击意图 top-1 目标为 $a_{i,\text{peer}}^{\star}$。当
-\begin{equation}
-a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}
-\end{equation}
-时，说明该状态存在 peer-local conflict。若此时同伴意图置信度足够高，则通信模块至少应在 logit 层面尝试缩小 peer 目标与 local 目标之间的决策间隔。
-
-令 $\tilde{\ell}_{i,\text{att-only}}^t$ 与 $\tilde{\ell}_{i,\text{fused}}^t$ 分别表示攻击通信支路单独注入和最终融合后的攻击 logits，定义两类 margin：
-\begin{equation}
-m_{i,\text{att-only}}^t =
-\tilde{\ell}_{i,\text{att-only}}^t(a_{i,\text{peer}}^{\star})
+m_i^t =
+\tilde{\ell}_i^t(a_{i,\text{peer}}^{\star})
 -
-\tilde{\ell}_{i,\text{att-only}}^t(a_{i,\text{local}}^{\star}),
+\tilde{\ell}_i^t(a_{i,\text{local}}^{\star}),
 \end{equation}
 \begin{equation}
-m_{i,\text{fused}}^t =
-\tilde{\ell}_{i,\text{fused}}^t(a_{i,\text{peer}}^{\star})
--
-\tilde{\ell}_{i,\text{fused}}^t(a_{i,\text{local}}^{\star}).
-\end{equation}
-若这两个 margin 仍显著小于零，则说明通信虽然进入了动作层，但仍未接近跨越 local 决策边界。于是本文构造 Huber 风格的 margin leverage 约束：
-\begin{equation}
-L_{\text{peer-conflict}}^{\text{att-only}}
+L_{\text{peer-conflict}}
 =
-\eta_{\text{ao}}
+\eta_{\text{pc}}
 \frac{
 \sum_{t,i}
 \omega_i^t
 \mathcal{H}_{\beta}
 \left(
-\max(0,\mu-m_{i,\text{att-only}}^t)
+\max(0,\mu-m_i^t)
 \right)
 }{
 \sum_{t,i}\mathbb{I}_{\text{valid}} + \epsilon
 },
 \end{equation}
-\begin{equation}
-L_{\text{peer-conflict}}^{\text{fused}}
-=
-\eta_{\text{fused}}
-\frac{
-\sum_{t,i}
-\bar{\omega}_i^t
-\mathcal{H}_{\beta}
-\left(
-\max(0,\mu-m_{i,\text{fused}}^t)
-\right)
-}{
-\sum_{t,i}\mathbb{I}_{\text{valid}} + \epsilon
-},
-\end{equation}
-其中 $\mathcal{H}_{\beta}(\cdot)$ 表示 Huber 惩罚，$\mu$ 为小 margin 目标，$\omega_i^t$ 与 $\bar{\omega}_i^t$ 分别对应 attack-only 与 fused 路径的状态权重。
+其中 $\mathcal{H}_{\beta}(\cdot)$ 表示 Huber 惩罚，$\mu$ 为较小的边际目标，$\omega_i^t$ 为状态权重。实际实现中，本文分别在仅攻击通信路径和最终融合路径上施加同型约束，但正文不再将两套公式逐一展开。
 
 \subsection{不确定性感知的融合暴露机制}
 \esubsection{Uncertainty-Aware Fused Exposure Mechanism}
 
-仅靠 peer-conflict margin 仍可能过于激进。因为在许多状态下，本地策略的 top-1 目标已经高度自信，此时若强迫 fused policy 接近 peer target，反而可能破坏已有 Backbone 的局部正确行为。为此，本文进一步在 fused 路径上加入不确定性感知的 exposure weighting，使通信更偏向介入本地策略较不确定的状态。
+仅靠同伴冲突边际约束仍可能过于激进。因为在许多状态下，本地策略的 top-1 目标已经高度自信，此时若强迫最终融合策略接近同伴目标，反而可能破坏已有主干的局部正确行为。为此，本文进一步在最终融合路径上加入不确定性感知的暴露加权，使通信主要介入本地策略较不确定、且更有可能从同伴信息中受益的状态。
 
 记局部攻击分布 top-1 概率为
 \begin{equation}
 c_{i,\text{local}}^t = \max_a \pi_{\text{local}}(a|o_i^t),
 \end{equation}
-并设一个局部置信度阈值 $c_{\max}$。则 fused 路径的不确定性权重定义为
+并设一个局部置信度阈值 $c_{\max}$。则最终融合路径的不确定性权重定义为
 \begin{equation}
 u_i^t =
 w_{\min}
@@ -299,29 +252,18 @@ w_{\min}
 0,1
 \right),
 \end{equation}
-其中 $w_{\min}$ 为最小保留权重。于是 fused 路径最终使用
+其中 $w_{\min}$ 为最小保留权重。于是最终融合路径使用
 \begin{equation}
 \bar{\omega}_i^t = \omega_i^t \cdot u_i^t.
 \end{equation}
-该设计的含义是：attack-only 路径继续在更广泛的冲突状态上学习“朝 peer 方向修正”；而 fused 路径只在 local 置信度较低的状态中承受更强的 peer-conflict 压力，从而将 exposure 的增强与状态选择耦合起来。
+该设计的含义是：仅攻击通信路径继续在更广泛的冲突状态上学习“朝同伴目标方向修正”；而最终融合路径只在本地置信度较低的状态中承受更强的同伴冲突压力，从而把“通信是否应当更强地介入”变成一个状态条件化问题，而非全局性的强注入问题。
 
 \section{轻量通信方法流程}
 \esection{Lightweight Communication Pipeline}
 
-综合以上设计，本文方法的训练与执行流程可概括为如下步骤：
-\begin{enumerate}
-    \item 每个智能体根据局部观测更新隐藏状态，并输出本地动作 logits；
-    \item 若启用通信分支，则从隐藏状态或动作意图中构造待发送消息；
-    \item 通过注意力或硬稀疏路由从邻居中选择高价值消息并完成聚合；
-    \item 将通信消息经过门控和残差映射后，注入到对应动作子空间；
-    \item 使用 MAPPO 的策略损失、价值损失和熵正则联合优化 Actor 与 Critic。
-\end{enumerate}
-
-从方法论角度看，本文并不是单纯追求通信表达能力的最大化，而是强调：只有当消息语义、路由结构和融合位置共同与任务需求对齐时，通信才真正可能带来稳定有效的协同收益。
+综合以上设计，本文方法的训练与执行流程可以概括为：每个智能体先根据局部观测更新隐藏状态并输出本地动作 logits；若启用通信分支，则进一步构造消息、完成选择性聚合，并将通信残差注入对应动作子空间；训练阶段再结合 MAPPO 的策略损失、价值损失和熵正则联合优化 Actor 与 Critic。从方法论角度看，本文并不追求通信表达能力的最大化，而是强调只有当消息语义、路由结构和融合位置共同与任务需求对齐时，通信才可能带来稳定有效的协同收益。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章围绕轻量通信如何进入动作层修正这一核心问题，系统给出了从最小侵入通信到攻移双流通信的机制演化过程。首先，本文通过最小侵入通信、锐化路由通信、动作意图共享与攻击子空间融合，逐步完成了从“通信能否稳定接入”到“通信传递何种语义、作用于哪个动作子空间”的方法设计。随后，在攻移双流通信的基础上，本文进一步针对攻击通信流的注意力死亡、沉默逃逸和动作层杠杆不足等失效模式，依次提出了 top-2 软路由、upper-only 选择性熵正则、沉默预算、意图对齐、优势引导杠杆约束、同伴冲突边际杠杆约束以及不确定性感知的融合曝光机制。
-
-这些设计共同构成了本文的轻量通信方法主线，也为后续实验章节中的通信隔离评估、因果诊断与主线结果分析奠定了方法基础。
+本章围绕轻量通信如何进入动作层修正这一核心问题，给出了从最小侵入通信到攻移双流通信的机制演化，并重点定义了攻击通信流的主线修正机制，包括选择性路由、沉默控制、意图对齐、动作杠杆以及状态条件化融合约束。这些设计共同构成了本文的轻量通信方法主线，也为后续实验中的通信隔离评估与因果诊断奠定了方法基础。

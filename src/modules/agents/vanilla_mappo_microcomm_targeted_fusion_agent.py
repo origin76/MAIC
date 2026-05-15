@@ -223,23 +223,80 @@ class VanillaMAPPOMicroCommTargetedFusionAgent(nn.Module):
 
         env_args = getattr(self.args, "env_args", {})
         move_feats_dim = env_args.get("n_actions_move", 4)
-        last_action_dim = self.n_actions if env_args.get("obs_last_action", False) else 0
+        if env_args.get("obs_pathing_grid", False):
+            move_feats_dim += 8
+        if env_args.get("obs_terrain_height", False):
+            move_feats_dim += 9
+
         n_enemies = self.n_actions - self.semantic_action_offset
-        numerator = obs_shape - move_feats_dim + 4 + last_action_dim
-        denominator = n_enemies + self.n_agents
+        map_name = env_args.get("map_name", None)
+        used_exact_smac_layout = False
 
-        if denominator <= 0 or numerator % denominator != 0:
-            raise ValueError(
-                "Unable to infer ally feature dim from obs_shape={} n_agents={} n_enemies={}".format(
-                    obs_shape,
-                    self.n_agents,
-                    n_enemies,
+        if map_name is not None:
+            try:
+                from smac.env.starcraft2.maps import get_map_params
+
+                map_params = get_map_params(map_name)
+                unit_type_bits = map_params.get("unit_type_bits", 0)
+                shield_bits_ally = 1 if map_params.get("a_race") == "P" else 0
+                shield_bits_enemy = 1 if map_params.get("b_race") == "P" else 0
+                obs_all_health = env_args.get("obs_all_health", True)
+                obs_own_health = env_args.get("obs_own_health", False)
+                if obs_all_health:
+                    obs_own_health = True
+                obs_last_action = env_args.get("obs_last_action", False)
+                obs_timestep_number = env_args.get("obs_timestep_number", False)
+
+                ally_feat_dim = 4 + unit_type_bits
+                enemy_feat_dim = 4 + unit_type_bits
+                if obs_all_health:
+                    ally_feat_dim += 1 + shield_bits_ally
+                    enemy_feat_dim += 1 + shield_bits_enemy
+                if obs_last_action:
+                    ally_feat_dim += self.n_actions
+
+                own_feat_dim = unit_type_bits
+                if obs_own_health:
+                    own_feat_dim += 1 + shield_bits_ally
+                if obs_timestep_number:
+                    own_feat_dim += 1
+
+                expected_obs_shape = (
+                    move_feats_dim
+                    + n_enemies * enemy_feat_dim
+                    + (self.n_agents - 1) * ally_feat_dim
+                    + own_feat_dim
                 )
-            )
+                if expected_obs_shape == obs_shape:
+                    self.move_feats_dim = move_feats_dim
+                    self.enemy_feat_dim = enemy_feat_dim
+                    self.ally_feat_dim = ally_feat_dim
+                    used_exact_smac_layout = True
+            except Exception:
+                used_exact_smac_layout = False
 
-        self.move_feats_dim = move_feats_dim
-        self.ally_feat_dim = numerator // denominator
-        self.enemy_feat_dim = self.ally_feat_dim
+        if not used_exact_smac_layout:
+            # Fallback heuristic kept for legacy compatibility when exact SMAC
+            # metadata is unavailable. It assumes symmetric ally/enemy feature
+            # blocks and infers their shared width from the observation size.
+            last_action_dim = self.n_actions if env_args.get("obs_last_action", False) else 0
+            numerator = obs_shape - move_feats_dim + 4 + last_action_dim
+            denominator = n_enemies + self.n_agents
+
+            if denominator <= 0 or numerator % denominator != 0:
+                raise ValueError(
+                    "Unable to infer obs layout from obs_shape={} n_agents={} n_enemies={} map_name={}".format(
+                        obs_shape,
+                        self.n_agents,
+                        n_enemies,
+                        map_name,
+                    )
+                )
+
+            self.move_feats_dim = move_feats_dim
+            self.ally_feat_dim = numerator // denominator
+            self.enemy_feat_dim = self.ally_feat_dim
+
         self.enemy_feat_start = move_feats_dim
         self.enemy_feat_end = self.enemy_feat_start + n_enemies * self.enemy_feat_dim
         self.ally_feat_start = self.enemy_feat_end

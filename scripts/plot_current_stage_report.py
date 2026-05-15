@@ -233,6 +233,10 @@ CONFIG_DISPLAY_NAMES = {
 }
 
 
+JOIN1_MAX_T_ENV = 500_000.0
+JOIN1_SMOOTH_WINDOW = 5
+
+
 plt.rcParams.update(
     {
         "figure.dpi": 150,
@@ -265,6 +269,21 @@ def load_scalar_curve(path: Path, key: str) -> tuple[np.ndarray, np.ndarray]:
     y = y[:size]
     mask = np.isfinite(x) & np.isfinite(y)
     return x[mask], y[mask]
+
+
+def truncate_curve(x: np.ndarray, y: np.ndarray, max_t: float) -> tuple[np.ndarray, np.ndarray]:
+    mask = x <= max_t
+    return x[mask], y[mask]
+
+
+def smooth_curve(y: np.ndarray, window: int) -> np.ndarray:
+    if y.size == 0 or window <= 1:
+        return y
+    window = min(window, y.size)
+    kernel = np.ones(window, dtype=float)
+    padded = np.convolve(y, kernel, mode="same")
+    counts = np.convolve(np.ones_like(y, dtype=float), kernel, mode="same")
+    return padded / np.maximum(counts, 1.0)
 
 
 def load_seed(path: Path) -> int | None:
@@ -354,6 +373,8 @@ def plot_join1(output_dir: Path) -> None:
     all_x = []
     for spec in JOIN1_SPECS:
         x, y = load_scalar_curve(spec.path, "test_battle_won_mean")
+        x, y = truncate_curve(x, y, JOIN1_MAX_T_ENV)
+        y = smooth_curve(y, JOIN1_SMOOTH_WINDOW)
         curves.append((spec, x, y))
         all_x.extend(x.tolist())
 
@@ -374,6 +395,7 @@ def plot_join1(output_dir: Path) -> None:
     ax.set_title("Join1: Test Win Rate Comparison")
     ax.set_ylabel("test_battle_won_mean")
     ax.set_ylim(-0.05, 1.05)
+    ax.set_xlim(0.0, JOIN1_MAX_T_ENV / scale)
     ax.legend(frameon=False, ncol=2)
     save_figure(fig, output_dir / "join1_test_winrate_comparison.png")
 
