@@ -45,15 +45,22 @@ class DirGroupSpec:
     family: str
 
 
+@dataclass(frozen=True)
+class Join1Curve:
+    spec: FileCurveSpec
+    x: np.ndarray
+    y: np.ndarray
+
+
 JOIN1_SPECS = [
     FileCurveSpec(
         label="QMIX",
         path=ROOT
-        / "results/join1/qmix/2026-03-20_19-38-26_qmix_join1.json",
+        / "results/join1/qmix_join1_easy_0p5m/2026-05-16_00-56-40_qmix_join1_easy_0p5m_join1.json",
         family="join1",
     ),
     FileCurveSpec(
-        label="Budgeted Sparse MAPPO",
+        label="Sparse MAPPO (Budgeted)",
         path=ROOT
         / "results/join1/budgeted_sparse_mappo/2026-04-02_16-39-47_budgeted_sparse_mappo_join1.json",
         family="join1",
@@ -61,13 +68,13 @@ JOIN1_SPECS = [
     FileCurveSpec(
         label="MAIC Parallel",
         path=ROOT
-        / "results/join1/maic_parallel/2026-04-02_20-15-25_maic_parallel_join1.json",
+        / "results/join1/maic_parallel_join1_easy_0p5m/2026-05-16_01-21-58_maic_parallel_join1_easy_0p5m_join1.json",
         family="join1",
     ),
     FileCurveSpec(
         label="MAIC Parallel Tuned",
         path=ROOT
-        / "results/join1/maic_parallel_join1_tuned/2026-04-02_20-36-55_maic_parallel_join1_tuned_join1.json",
+        / "results/join1/maic_parallel_join1_tuned_join1_easy_0p5m/2026-05-16_01-31-17_maic_parallel_join1_tuned_join1_easy_0p5m_join1.json",
         family="join1",
     ),
 ]
@@ -89,6 +96,9 @@ BASELINE_GROUPS = [
         family="baseline",
     ),
 ]
+
+
+BACKBONE_WARMSTART_INIT_STEP = 1_404_757.0
 
 
 VERSION_GROUPS = [
@@ -286,6 +296,82 @@ def smooth_curve(y: np.ndarray, window: int) -> np.ndarray:
     return padded / np.maximum(counts, 1.0)
 
 
+def prepare_join1_curve(spec: FileCurveSpec) -> Join1Curve:
+    x, y = load_scalar_curve(spec.path, "test_battle_won_mean")
+    x, y = truncate_curve(x, y, JOIN1_MAX_T_ENV)
+    y = smooth_curve(y, JOIN1_SMOOTH_WINDOW)
+    return Join1Curve(spec=spec, x=x, y=y)
+
+
+def load_join1_curves() -> list[Join1Curve]:
+    return [prepare_join1_curve(spec) for spec in JOIN1_SPECS]
+
+
+def annotate_curve_endpoint(
+    ax: plt.Axes,
+    x_scaled: np.ndarray,
+    y: np.ndarray,
+    y_offset_points: float,
+) -> None:
+    if x_scaled.size == 0 or y.size == 0:
+        return
+    ax.scatter([x_scaled[-1]], [y[-1]], s=28, zorder=3)
+    ax.annotate(
+        f"{y[-1]:.3f}",
+        (x_scaled[-1], y[-1]),
+        textcoords="offset points",
+        xytext=(6, y_offset_points),
+        fontsize=9,
+        bbox={"boxstyle": "round,pad=0.15", "fc": "white", "ec": "none", "alpha": 0.85},
+    )
+
+
+def compute_endpoint_label_offsets(
+    curves: list[Join1Curve],
+    cluster_gap: float = 0.035,
+    spacing_points: float = 12.0,
+) -> dict[int, float]:
+    endpoints = [(idx, float(curve.y[-1])) for idx, curve in enumerate(curves) if curve.y.size > 0]
+    endpoints.sort(key=lambda item: item[1])
+    offsets: dict[int, float] = {idx: 0.0 for idx, _ in endpoints}
+    cluster: list[tuple[int, float]] = []
+
+    def assign_cluster(current_cluster: list[tuple[int, float]]) -> None:
+        if not current_cluster:
+            return
+        start = -0.5 * spacing_points * (len(current_cluster) - 1)
+        for pos, (curve_idx, _) in enumerate(current_cluster):
+            offsets[curve_idx] = start + pos * spacing_points
+
+    for item in endpoints:
+        if not cluster:
+            cluster = [item]
+            continue
+        if abs(item[1] - cluster[-1][1]) <= cluster_gap:
+            cluster.append(item)
+        else:
+            assign_cluster(cluster)
+            cluster = [item]
+    assign_cluster(cluster)
+    return offsets
+
+
+def draw_join1_curves(ax: plt.Axes, curves: list[Join1Curve]) -> None:
+    all_x = [t for curve in curves for t in curve.x.tolist()]
+    format_time_axis(ax, all_x)
+    scale = getattr(ax, "_codex_scale", 1.0)
+    label_offsets = compute_endpoint_label_offsets(curves)
+    for idx, curve in enumerate(curves):
+        x_scaled = curve.x / scale
+        ax.plot(x_scaled, curve.y, linewidth=2.4, label=curve.spec.label)
+        annotate_curve_endpoint(ax, x_scaled, curve.y, label_offsets.get(idx, 0.0))
+    ax.set_title("Join1 Prototype Environment")
+    ax.set_ylabel("Test win rate")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlim(0.0, JOIN1_MAX_T_ENV / scale)
+    ax.legend(frameon=False, ncol=2, title="Method")
+
+
 def load_seed(path: Path) -> int | None:
     data = load_json(path)
     seed = data.get("seed")
@@ -347,6 +433,39 @@ def interpolate_mean_std(curves: list[tuple[np.ndarray, np.ndarray]]) -> tuple[n
     return xs, mean, std
 
 
+def interpolate_at_x(x: np.ndarray, y: np.ndarray, target_x: float) -> float:
+    if x.size == 0:
+        return math.nan
+    if target_x <= x[0]:
+        return float(y[0])
+    if target_x >= x[-1]:
+        return float(y[-1])
+    return float(np.interp(target_x, x, y))
+
+
+def stitch_warmstart_curve(
+    prefix_curve: tuple[np.ndarray, np.ndarray],
+    suffix_curve: tuple[np.ndarray, np.ndarray],
+    init_step: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    prefix_x, prefix_y = prefix_curve
+    suffix_x, suffix_y = suffix_curve
+
+    prefix_mask = prefix_x < init_step
+    stitched_x = prefix_x[prefix_mask]
+    stitched_y = prefix_y[prefix_mask]
+
+    bridge_y = interpolate_at_x(prefix_x, prefix_y, init_step)
+    stitched_x = np.concatenate([stitched_x, np.asarray([init_step], dtype=float)])
+    stitched_y = np.concatenate([stitched_y, np.asarray([bridge_y], dtype=float)])
+
+    shifted_suffix_x = suffix_x + init_step
+    suffix_keep = shifted_suffix_x > init_step
+    stitched_x = np.concatenate([stitched_x, shifted_suffix_x[suffix_keep]])
+    stitched_y = np.concatenate([stitched_y, suffix_y[suffix_keep]])
+    return stitched_x, stitched_y
+
+
 def save_figure(fig: plt.Figure, path: Path) -> None:
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
@@ -369,34 +488,9 @@ def config_display_name(label: str) -> str:
 
 
 def plot_join1(output_dir: Path) -> None:
-    curves = []
-    all_x = []
-    for spec in JOIN1_SPECS:
-        x, y = load_scalar_curve(spec.path, "test_battle_won_mean")
-        x, y = truncate_curve(x, y, JOIN1_MAX_T_ENV)
-        y = smooth_curve(y, JOIN1_SMOOTH_WINDOW)
-        curves.append((spec, x, y))
-        all_x.extend(x.tolist())
-
+    curves = load_join1_curves()
     fig, ax = plt.subplots(figsize=(10, 5.4))
-    format_time_axis(ax, all_x)
-    scale = getattr(ax, "_codex_scale", 1.0)
-    for idx, (spec, x, y) in enumerate(curves):
-        x_scaled = x / scale
-        ax.plot(x_scaled, y, linewidth=2.4, label=spec.label)
-        ax.scatter([x_scaled[-1]], [y[-1]], s=28, zorder=3)
-        ax.annotate(
-            f"{y[-1]:.3f}",
-            (x_scaled[-1], y[-1]),
-            textcoords="offset points",
-            xytext=(5, 3 - 10 * (idx % 2)),
-            fontsize=9,
-        )
-    ax.set_title("Join1: Test Win Rate Comparison")
-    ax.set_ylabel("test_battle_won_mean")
-    ax.set_ylim(-0.05, 1.05)
-    ax.set_xlim(0.0, JOIN1_MAX_T_ENV / scale)
-    ax.legend(frameon=False, ncol=2)
+    draw_join1_curves(ax, curves)
     save_figure(fig, output_dir / "join1_test_winrate_comparison.png")
 
 
@@ -415,6 +509,8 @@ def plot_baseline(output_dir: Path) -> None:
         format_time_axis(ax, all_x)
         for line in ax.lines:
             line.set_xdata(scaled_x(ax, np.asarray(line.get_xdata())))
+        ax.relim()
+        ax.autoscale_view()
         mean_x, mean_y, mean_std = interpolate_mean_std(curves)
         ax.plot(
             scaled_x(ax, mean_x),
@@ -437,6 +533,63 @@ def plot_baseline(output_dir: Path) -> None:
     axes[0].set_ylabel("test_battle_won_mean")
     fig.suptitle("Vanilla MAPPO Backbone: Officialish vs Warm-start", y=1.02, fontsize=14, fontweight="bold")
     save_figure(fig, output_dir / "baseline_officialish_vs_warmstart.png")
+
+
+def plot_mappo_backbone(output_dir: Path) -> None:
+    prefix_spec = BASELINE_GROUPS[0]
+    suffix_spec = BASELINE_GROUPS[1]
+    prefix_by_seed = {load_seed(path): path for path in iter_json_files(prefix_spec.directory)}
+    suffix_paths = iter_json_files(suffix_spec.directory)
+    curves = []
+    all_x = []
+
+    fig, ax = plt.subplots(figsize=(11.2, 5.4))
+    for path in suffix_paths:
+        seed = load_seed(path)
+        prefix_path = prefix_by_seed.get(seed)
+        if prefix_path is None:
+            raise KeyError(f"Missing source backbone curve for seed {seed} in {prefix_spec.directory}")
+        prefix_curve = load_scalar_curve(prefix_path, "test_battle_won_mean")
+        suffix_curve = load_scalar_curve(path, "test_battle_won_mean")
+        x, y = stitch_warmstart_curve(prefix_curve, suffix_curve, BACKBONE_WARMSTART_INIT_STEP)
+        curves.append((x, y))
+        all_x.extend(x.tolist())
+        ax.plot(x, y, linewidth=1.9, alpha=0.72, label=f"Seed {seed}")
+
+    format_time_axis(ax, all_x)
+    for line in ax.lines:
+        line.set_xdata(scaled_x(ax, np.asarray(line.get_xdata())))
+    ax.relim()
+    ax.autoscale_view()
+
+    mean_x, mean_y, mean_std = interpolate_mean_std(curves)
+    ax.plot(
+        scaled_x(ax, mean_x),
+        mean_y,
+        color="black",
+        linewidth=2.8,
+        label="Mean",
+    )
+    ax.fill_between(
+        scaled_x(ax, mean_x),
+        mean_y - mean_std,
+        mean_y + mean_std,
+        color="black",
+        alpha=0.12,
+        linewidth=0.0,
+    )
+    ax.set_title("No-Communication Warm-Start Control on SMAC 5m_vs_6m")
+    ax.set_ylabel("Test win rate")
+    ax.set_ylim(-0.02, 1.0)
+    ax.legend(
+        frameon=False,
+        ncol=1,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        borderaxespad=0.0,
+    )
+    fig.subplots_adjust(right=0.76)
+    save_figure(fig, output_dir / "mappo_backbone_winrate.png")
 
 
 def collect_run_rows(groups: list[DirGroupSpec]) -> list[dict[str, object]]:
@@ -689,6 +842,7 @@ def main() -> None:
     mkdir(output_dir)
 
     plot_join1(output_dir)
+    plot_mappo_backbone(output_dir)
     plot_baseline(output_dir)
 
     version_map = build_version_map()

@@ -13,49 +13,6 @@
     \item 末 10 点平均胜率（last10），即最后 10 个测试点的平均值，用于衡量方法后期稳定性。
 \end{enumerate}
 
-\section{通信隔离评估与因果诊断方法}
-\esection{Communication Isolation Evaluation and Causal Diagnosis}
-
-为直接测量通信在执行期的真实边际贡献，本文提出通信隔离评估方法。对同一检查点，在测试阶段分别执行以下四种模式：
-\begin{enumerate}
-    \item \textbf{正常模式}：通信保持训练时的状态；
-    \item \textbf{强制开门}：将攻击门控强制设为 $g=1.0$，最大化通信影响；
-    \item \textbf{强制关门}：将攻击门控强制设为 $g=0.0$，消除通信影响但保留通信模块的前向计算；
-    \item \textbf{禁用攻击通信}：完全关闭攻击通信流，等价于纯主干决策。
-\end{enumerate}
-
-四种模式之间的胜率差值直接对应通信的不同层次贡献：正常模式减禁用攻击通信衡量通信的整体边际价值；强制开门减正常模式衡量门控学习是否过于保守；强制关门减禁用攻击通信衡量残差内容是否在门控为 $0$ 时仍有残余影响。
-
-除隔离评估外，本文进一步引入“同伴目标与本地目标对照”的因果诊断，用于判断通信失效究竟发生在消息生成、路由选择、门控融合还是最终决策改变的哪一环节。该诊断在每个可攻击状态下同时记录三种 top-1 目标：
-\begin{equation}
-a_{i,\text{local}}^{\star}, \qquad
-a_{i,\text{peer}}^{\star}, \qquad
-a_{i,\text{fused}}^{\star},
-\end{equation}
-并特别关注冲突状态
-\begin{equation}
-a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
-\end{equation}
-
-在这些状态中，本文重点统计以下指标：
-\begin{enumerate}
-    \item \textbf{同伴目标冲突率}：同伴意图与本地目标发生冲突的频率；
-    \item \textbf{仅攻击通信路径跟随同伴比例}：仅攻击通信修正路径是否会转向同伴目标；
-    \item \textbf{融合策略跟随同伴比例}：最终融合策略是否会转向同伴目标；
-    \item \textbf{融合策略保持本地目标比例}：最终融合策略是否仍停留在本地目标；
-    \item \textbf{有效动作扰动}：门控与残差联合作用后在动作层形成的有效扰动强度。
-\end{enumerate}
-
-这组诊断的价值在于，它把“通信是否存在”与“通信是否真的改变了最终决策”拆成了两个不同问题。若同伴目标已经存在、冲突率非零、同伴置信度也较高，而融合策略跟随同伴比例仍接近零，则说明当前瓶颈不再是路由失活或沉默逃逸，而是通信尚未跨过本地决策边界。
-
-此外，在机制诊断阶段，本文引入以下中间指标用于分析通信模块的真实行为：
-\begin{enumerate}
-    \item 攻击注意力熵（attack attention entropy），衡量攻击通信路由的选择性，接近 $\ln(k)$ 表示对 $k$ 个候选的均匀关注；
-    \item 攻击无通信概率，衡量攻击流选择沉默的频率；
-    \item 攻击门控均值（attack gate mean），衡量攻击通信在决策中的实际融合权重；
-    \item 通信隔离评估，通过对同一模型检查点分别执行正常评估、强制开门、强制关门和禁用攻击通信四种模式，直接测量攻击通信的边际贡献。
-\end{enumerate}
-
 \section{\texttt{join1} 环境中的通信原型验证}
 \esection{Communication Prototype Verification in \texttt{join1}}
 
@@ -82,121 +39,90 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
 
 从图中可以看出，受约束的稀疏通信在该环境中具有明显优势，而缺乏有效结构约束的通信方法则可能出现几乎完全失效的情况。这一现象说明，通信机制并不是天然有效的协作增强器；消息编码、路由与融合方式若设计不当，反而会直接破坏训练过程。
 
-\section{SMAC \texttt{5m\_vs\_6m} 上的主干构建与训练动力学}
-\esection{Backbone Construction and Training Dynamics on SMAC \texttt{5m\_vs\_6m}}
+\section{SMAC 的主干构建与训练动力学}
+\esection{Backbone Construction and Training Dynamics in SMAC}
 
 \subsection{主干基线构建}
 
-在 \texttt{5m\_vs\_6m} 任务上，本文首先围绕 vanilla MAPPO 构建可靠的主干基线。经过集中式价值评估器、active masks、proper time-limit、学习率衰减与 KL 约束等实现细节的对齐与修正，vanilla MAPPO 能够在该任务上稳定学习。
+本文将 SMAC \texttt{5m\_vs\_6m} 作为主实验场景，是因为该任务同时包含局部微操与群体协同两层难点：一方面，单个智能体必须依赖局部观测完成走位、攻击切换与火力保持；另一方面，队伍又必须在部分可观测条件下形成稳定集火。对于本文关注的显式通信问题而言，这一任务既足够困难，又能较清晰地暴露“主干能力”与“通信增益”之间的边界。
 
-与此同时，实验发现主干训练存在显著的种子敏感性。在早期配置（entropy coefficient $c_e=0.02$）下，3 个种子的最终胜率分别为 $0.575$、$0.025$ 和 $0.025$，仅 seed 1 成功。通过将 $c_e$ 提升至 $0.03$ 并降低 critic 学习率至 $5\times10^{-4}$，成功率提升至 2/3（seed 1: $0.325$、seed 2: $0.025$、seed 3: $0.200$，均为 $2.5\times10^{6}$ 步处的测试胜率）。
+围绕这一场景，本文首先对 vanilla MAPPO 主干进行实现细节的系统对齐，包括集中式价值评估器、active masks、proper time-limit、学习率衰减与 KL 约束等。在此基础上，本文进一步采用两阶段训练范式：先训练无通信主干，再从主干检查点出发进行后续对照或通信微调。对本文后续实验而言，真正承担“稳定无通信参照系”角色的，是热启动阶段的无通信对照模型，而非早期尚在探索期的原始主干运行。
 
-\subsection{崩溃与恢复训练动力学}
+需要强调的是，这一步并不是通信研究之外的准备工作，而是本文后续所有机制诊断的前提。如果无通信主干本身仍处于明显不稳定状态，那么通信支路带来的任何涨落都无法被可靠解释：此时观察到的性能变化，既可能来自通信本身，也可能只是主干尚未完成的自发学习过程。
 
-进一步分析主干训练曲线后，本文发现一个重要的训练动力学特征：成功种子的学习曲线普遍经历“初期上升→中期崩溃→后期恢复并加速”三个阶段。图 \ref{fig:backbone_dynamics} 展示了基线形成与热启动对照，并为后续通信微调的起点选择提供依据。
+\subsection{无通信热启动对照动力学}
+
+进一步分析无通信对照曲线后，本文发现一个对后续通信实验更有价值的现象：一旦从已经成形的主干检查点出发，即使完全不接入通信分支，策略仍会在一段时间内继续改善。图 \ref{fig:backbone_dynamics} 给出了两阶段训练中无通信热启动对照模型在 \texttt{5m\_vs\_6m} 上的测试胜率曲线。
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.95\textwidth]{generated/baseline_officialish_vs_warmstart.png}
-    \caption{vanilla MAPPO 主干基线的形成过程与热启动对照}
+    \includegraphics[width=0.90\textwidth]{generated/mappo_backbone_winrate.png}
+    \caption{两阶段训练中无通信热启动对照模型在 SMAC \texttt{5m\_vs\_6m} 上的测试胜率曲线}
     \label{fig:backbone_dynamics}
 \end{figure}
 
-该现象的深层含义是：主干策略本身的训练动力学非常复杂，存在多个训练可到达的策略吸引子，种子决定了其落入哪个吸引子。这对后续通信实验提出了关键约束，如果主干尚未完成崩溃-恢复循环并进入稳定平台期，就引入通信微调，那么通信带来的增益将无法与主干自身的持续改善区分开来。
+这张图说明，仅仅延长训练步数就足以让无通信策略在热启动阶段继续获得明显收益。因此，后续任何通信实验若要声称存在正向增益，就必须与这一无通信热启动对照相比较，而不能仅与更早的主干检查点相比。换言之，热启动之后的性能提升并不自动属于通信，它首先可能只是主干继续训练的结果。
 
-基于这一发现，本文后续所有通信实验均采用热启动策略：先在无通信条件下训练得到较强的主干模型检查点（约 $0.675$ 胜率），再从该检查点出发进行通信微调。该策略同时规避了冷启动通信直接失败的问题（详见后续分析）。
+这也正是本文采用两阶段训练范式的原因。只有把“同一主干继续训练但不加通信”与“同一主干继续训练并加入通信”并列起来，通信增益才具有可解释性。否则，我们很难分辨观察到的胜率上升究竟来自通信本身，还是仅仅来自主干在后续训练中的自然改善。
 
 \subsection{冷启动通信的结构性失效}
 
-本节对冷启动通信训练的系统性诊断实验进行总结。实验围绕 8 组递进式配置展开，涵盖信息增益门控（IGG）、固定门控、热身门控和门控退火等多种策略，共计超过 70 次完整训练运行。核心发现如下。
+在确认主干动力学之后，本文进一步分析了一个关键问题：为何同样的通信架构在热启动条件下可以工作，而在冷启动条件下却长期失败。综合多组门控与融合实验可以看出，冷启动失败并非源于单一超参数设置，而主要来自以下三点结构性原因。
 
-\textbf{IGG 自动关门。} 在冷启动场景下，IGG 机制准确识别出通信对训练初期的策略是有害的，因此将攻击门控和移动门控均压制在约 $0.02$--$0.04$ 的地板值附近。虽然该版本获得了冷启动通信中的最高胜率（约 $11.25\%$），但门控从未打开，通信实质上被完全关闭。此时主干仅以微量残留通信噪声干扰的形式进行局部策略学习。
+\textbf{其一，训练初期缺乏稳定的通信语义。} 此时本地策略尚未形成可靠的攻击与走位偏好，通信支路因而缺乏清晰监督，更容易学到高噪声、低语义的中间表示。
 
-\textbf{固定门控摧毁主干。} 若强制将门控固定在 $g=0.5$ 并移除所有 IGG 复杂度（Plan G 实验），主干完全无法学习，胜率仅为约 $1.25\%$。这证明通信架构本身（注意力路由 + delta 融合）才是冷启动失败的根本噪声源，而非门控学习机制。
+\textbf{其二，通信过早介入会放大主干脆弱期的优化噪声。} 冷启动时主干仍在建立最基础的局部决策规律，而通信分支已经通过残差直接扰动动作层；一旦注入强度过早增大，通信更像额外噪声源，而不是协作补充信息。
 
-\textbf{热身机制带来短暂峰值但不可持续。} 通过通信热身因子从 $0$ 线性增加到 $1$（B1 实验），主干在保护期内建立了一定基础，峰值胜率达到 $15\%$，超过了 IGG 策略。但热身结束后，固定门控 $g=0.5$ 的强通信噪声在约 $4\times10^{5}$ 步后导致训练崩溃，胜率回落至 $0\%$。
-
-\textbf{门控-学习率同构性。} 综合分析表明，门控值在功能上等价于“通信学习率”：
+\textbf{其三，门控强度同时决定前向介入和反向更新幅度。} 从梯度传播角度看，
 \[
-\frac{\partial L}{\partial\theta_{\text{comm}}} \propto g \cdot \frac{\partial L}{\partial\tilde{\ell}} \cdot \frac{\partial\Delta}{\partial\theta_{\text{comm}}}.
+\frac{\partial L}{\partial\theta_{\text{comm}}}
+\propto
+g\cdot
+\frac{\partial L}{\partial \tilde{\ell}}
+\cdot
+\frac{\partial \Delta}{\partial\theta_{\text{comm}}}.
 \]
-大门控（如 $g=0.5$）提供强 delta 梯度，加速协调学习但积累噪声，最终导致训练发散；小门控（如 $g\approx0.04$）梯度弱，学习缓慢但训练稳定。基于这一洞察，本文提出了门控退火（Gate Annealing）策略：将门控视为第二个学习率，早期使用大门控快速学习，后期退火至小门控稳定收敛。
+这意味着，较大的门控虽能更快把通信推入动作层，却也会更快累积错误耦合噪声；较小门控虽然更稳，却又容易使通信始终学不到足够有效的协同作用。换言之，冷启动阶段很难同时满足“主干稳定”和“通信有效学习”这两个条件。
 
-\textbf{隐藏状态融合验证。} 为从根本上解决“通信不改变决策”的问题，本文进一步尝试将通信注入点从 logit 层移至 hidden state 层：
-\[
-h_i^{\text{fused}} = (1-g) \cdot h_i^{\text{local}} + g \cdot h_i^{\text{comm}}, \quad
-\tilde{\ell}_i = f_{\pi}(h_i^{\text{fused}}).
-\]
-实验中的 cosine 相似度从 $1.0$ 持续下降至 $0.816$，验证了隐藏状态融合确实让通信改变了策略表示。然而该机制并未转化为胜率提升（峰值仅 $3.75\%$，低于 C2 的 $12.5\%$），说明单层线性策略头难以从正交方向的信息中提取有用决策信号。
+此外，本文也尝试过将通信注入位置前移到隐藏状态层，但并未稳定转化为更高胜率。这进一步说明问题的关键不在于通信是否进入网络，而在于它进入网络时是否已经具备与当前决策阶段相匹配的有效信息。
 
-综合上述发现，冷启动通信在现有架构下始终无法产生稳定正向收益。这直接促成了本文后续的两阶段策略设计。
+\subsection{本节小结}
 
-\section{五类轻量通信方法的总体比较}
-\esection{Overall Comparison of Five Lightweight Communication Methods}
+综合来看，SMAC \texttt{5m\_vs\_6m} 上的实验首先确立了一个对全文都成立的前提：显式通信研究不能脱离主干训练动力学单独讨论。只有先得到一个足够稳定的无通信主干，后续通信增益、机制修复和因果诊断才具有解释力。
 
-在固定较强主干后，本文依次实现并比较了五类轻量通信算法。图 \ref{fig:lightweight_comm_summary} 展示了不同算法及其代表配置的峰值、最终点与末 10 点平均统计，图 \ref{fig:lightweight_comm_curves} 则给出了若干代表性实验运行的测试胜率曲线。
+同时，冷启动通信的失败也给出了清晰的方法论启示：当前问题的核心并不是通信容量不足，而是通信过早介入了一个尚未形成稳定局部决策结构的策略学习过程。正因为如此，本文后续选择两阶段训练作为统一实验范式，即先建立强主干，再在其上进行轻量通信微调。
+
+\section{攻击通信主线的形成与机制边界}
+\esection{Formation of the Attack-Communication Mainline and Its Mechanism Boundaries}
+
+\subsection{成果定义与主线定位}
+
+在第三章统一通信框架的基础上，本文形成了一种\textbf{稳定通信介入方案}。该方案的目标不是让通信频繁覆盖本地攻击决策，而是在较低通信代价下实现稳定、可解释且受状态条件调节的动作层介入。具体而言，这一成果体现在以下三个方面：其一，攻击通信能够持续参与而不再通过“无通信”选项逃逸；其二，通信残差能够稳定进入攻击动作层，而不是停留在隐藏表示或注意力路由内部；其三，通信介入强度由状态条件调节，而不是依赖全局硬开门或大幅度残差灌入。
+
+本文的代表性结果体现为\textbf{稳定通信介入方案的代表性检查点}。该结果同时表现出健康的通信统计、稳定的动作层介入和较强的任务性能，并保留了清晰可诊断的机制边界。图 \ref{fig:representative_mainline_winrate} 给出了该方案在 \texttt{5m\_vs\_6m} 上的完整胜率演化过程：灰色曲线表示分叉前的共享主干轨迹，红色曲线表示从同一热启动检查点出发的通信续跑结果，蓝色虚线表示从同一热启动检查点出发、训练长度对齐的无通信续跑结果，竖直虚线表示两条后续训练轨迹的共同分叉位置。该图的对照重点不在于简单比较不同阶段的绝对胜率，而在于识别同一主干在后续训练中“是否因通信介入而偏离无通信自然演化轨迹”。
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.96\textwidth]{generated/lightweight_comm_algorithm_summary.png}
-    \caption{五类轻量通信算法各代表配置的统计结果对比}
-    \label{fig:lightweight_comm_summary}
+    \includegraphics[width=0.92\textwidth]{generated/representative_mainline_winrate.png}
+    \caption{稳定通信介入方案在 SMAC \texttt{5m\_vs\_6m} 上的代表性测试胜率轨迹。灰色曲线为分叉前主干轨迹，红色曲线为同起点通信续跑，蓝色虚线为同起点无通信续跑，竖直虚线为热启动分叉位置。}
+    \label{fig:representative_mainline_winrate}
 \end{figure}
 
-\begin{figure}[htbp]
-    \centering
-    \includegraphics[width=0.92\textwidth]{generated/lightweight_comm_representative_curves.png}
-    \caption{五类轻量通信算法代表性 run 的测试胜率曲线}
-    \label{fig:lightweight_comm_curves}
-\end{figure}
+\subsection{主线解决的关键失效点}
 
-为便于总结，表 \ref{tab:main_results} 给出了各阶段代表配置的关键统计结果。
+在攻移双流结构的早期实验中，攻击流首先暴露出明显的结构性失效：攻击注意力熵几乎退化到 $0$，说明路由长期停留在单一饱和目标；而一旦放宽路由约束，攻击流又会迅速退化为高熵平均或直接选择沉默。由于攻击通信直接服务于“打谁”这一高后果决策，这种失效比移动流更难通过主干自发修复。
+
+为此，本文将攻击通信修复压缩为三个依次成立的条件：第一，通过上界式熵约束把攻击路由从平均分配压回到有效选择区间；第二，通过沉默预算抑制“无通信”逃逸，使攻击流保持持续参与；第三，通过意图对齐让聚合消息稳定承载同伴攻击偏好。表 \ref{tab:attack_repair} 给出了这条修复主线的关键机制指标。
 
 \begin{table}[htbp]
     \centering
-    \caption{各阶段代表配置的关键结果对比}
-    \label{tab:main_results}
-    \begin{tabular}{|p{3.5cm}|p{4.0cm}|c|c|c|}
-        \hline
-        算法类别 & 代表实现 & peak & final & last10 \\
-        \hline
-        基线主干 & 热启动微调对照组 & 0.854 & 0.625 & 0.642 \\
-        \hline
-        最小侵入通信 & 端到端残差接入 & 0.813 & 0.646 & 0.563 \\
-        \hline
-        锐化路由通信 & 软锐化路由 & 0.854 & 0.667 & 0.583 \\
-        \hline
-        动作意图共享 & 端到端动作意图共享 & 0.938 & 0.563 & 0.600 \\
-        \hline
-        攻击子空间融合 & 基础目标融合 & 0.813 & 0.750 & 0.613 \\
-        \hline
-        攻移双流通信 & Top-1 移动路由 + Softplus 门控 & 0.771 & 0.688 & 0.588 \\
-        \hline
-    \end{tabular}
-\end{table}
-
-综合图表与表格结果，可以得到以下观察。
-
-首先，最小侵入通信证明了通信分支能够在强主干上稳定接入，而不会立即破坏原有策略。其次，锐化路由通信在注意力锐化后整体表现优于最小侵入通信，说明通信模块确实受益于更强的路由选择性。再次，动作意图共享通过共享动作意图，将通信内容从抽象隐层特征转为具有明确物理意义的消息，从而获得了当前最强的原始峰值表现。随后，攻击子空间融合将通信严格限制在攻击 logits 子空间中，使通信模块的作用更可解释，并取得较好的最终收尾表现。最后，攻移双流通信则表明攻击协同与移动协同应区别对待。
-
-\section{攻击通信流的机制评估与结果分析}
-\esection{Mechanism Evaluation and Result Analysis of the Attack Communication Stream}
-
-\subsection{攻击通信流的结构性瓶颈与修复结果}
-
-在攻移双流通信的基础上，诊断实验揭示了攻击通信流的一个结构性瓶颈：攻击注意力熵在所有热启动配置中几乎都退化为 $0.0$，表明攻击流长期停留在单一路由目标的饱和状态。这与移动流通常能够维持在 $0.4$--$0.5$ 区间的健康熵值形成鲜明对比。其根本原因在于，攻击通信直接服务于“打谁”这一高后果决策，但早期路由结构既缺乏稳定的选择性约束，也缺乏足够明确的同伴语义监督，因而很容易在训练中退化为过于僵硬或过于空洞的通信行为。
-
-为此，本文围绕攻击通信流构建了一条较为清晰的修复主线，所有实验均基于热启动并从同一主干模型检查点出发。其核心思路不是继续扩大通信容量，而是依次解决三个更基础的问题：其一，攻击路由是否具有稳定而不过度平均的选择性；其二，攻击流是否会通过“无通信”标记逃逸；其三，聚合后的消息是否真正携带了对接收端有用的同伴攻击语义。表 \ref{tab:attack_repair} 汇总了这一修复过程中的关键指标。
-
-\begin{table}[htbp]
-    \centering
-    \caption{攻击通信流机制修复的关键指标对比（3 seed 平均）}
+    \caption{攻击通信主线的关键修复结果（3 seed 平均）}
     \label{tab:attack_repair}
     \begin{tabular}{|l|c|c|c|c|}
         \hline
         配置 & 攻击熵 & 无通信概率 & 攻击门控 & 平均峰值胜率 \\
         \hline
-        原始攻击流（未稳定化） & 0.000 & 0.01--0.02 & 0.06--0.07 & 0.629 \\
+        原始攻击流 & 0.000 & 0.01--0.02 & 0.06--0.07 & 0.629 \\
         \hline
         仅放宽路由约束 & 0.693 & 0.87 & 0.06 & -- \\
         \hline
@@ -204,282 +130,236 @@ h_i^{\text{fused}} = (1-g) \cdot h_i^{\text{local}} + g \cdot h_i^{\text{comm}},
         \hline
         路由稳定化 + 沉默预算 & 0.429 & 0.011 & 0.061 & 0.704 \\
         \hline
-        完整消息约束主线 & 0.449 & 0.010 & 0.067 & 0.746 \\
+        路由稳定化 + 沉默预算 + 意图对齐 & 0.449 & 0.010 & 0.067 & 0.746 \\
         \hline
     \end{tabular}
 \end{table}
 
-表 \ref{tab:attack_repair} 呈现出一个较为稳定的机制规律。仅仅放宽攻击路由的结构约束，虽然能够解除完全饱和的单目标退化，但不会自动带来有意义的选择性，反而容易退化为高熵平均通信。引入上界式选择性熵正则后，攻击熵能够从接近 $\ln(2)$ 的平均分配压回到更合理的区间，但如果没有额外约束，攻击流仍会通过无通信标记逃逸，导致无通信概率迅速升高。进一步加入沉默预算后，攻击流重新回到近乎非沉默的工作状态，并把攻击熵稳定在 $0.35$--$0.44$ 的有效区间，三 seed 平均峰值胜率也由 $0.629$ 提升到 $0.704$。最后，在此基础上再引入意图对齐，攻击消息开始更稳定地承载同伴目标语义，三 seed 平均峰值胜率进一步提升至 $0.746$，末 10 点平均胜率也达到 $0.661$。因此，攻击通信流的有效修复并不依赖单一技巧，而依赖于“路由稳定化、非沉默约束与消息语义对齐”三者共同成立。
+表 \ref{tab:attack_repair} 表明，真正带来改善的不是单纯放宽路由结构，而是一条更克制的修复路径：先让攻击流从“平均化或沉默”回到“持续参与”，再让消息语义逐步靠近同伴攻击意图。在这一阶段之后，问题的重点也随之变化，不再是“是否有通信”，而是“通信是否已经进入动作层并形成真实影响”。
 
-\subsection{通信隔离评估结果}
+\subsection{从存在通信到稳定介入}
 
-为直接测量攻击通信在执行期的真实边际贡献，本文设计了通信隔离评估实验。对同一检查点分别执行 128 局测试，对比以下四种模式：
-\begin{enumerate}
-    \item 正常模式（normal）：攻击通信保持训练时的状态；
-    \item 强制开门（gate\_open）：攻击门控强制设为 $1.0$；
-    \item 强制关门（gate\_closed）：攻击门控强制设为 $0.0$；
-    \item 禁用攻击通信（no\_attack）：完全关闭攻击通信流。
-\end{enumerate}
+完成路由与语义修复之后，新的瓶颈随之显现。此时攻击通信已经不是“没有消息”，而是“消息存在但几乎不改变决策”。同伴目标与本地目标对照诊断表明，早期 sign-split 配置虽然具有健康的非沉默结构和非零冲突率，但融合策略在冲突状态下几乎从不跟随同伴目标，说明通信尚未跨过本地决策边界。
 
-对最优 align 配置（三 seed 平均峰值 $0.746$）的三个末期检查点进行评估，结果如表 \ref{tab:comm_isolation} 所示。
+为刻画这一问题，本文在每个可攻击状态下同时记录本地攻击偏好、同伴聚合偏好和最终融合偏好：
+\begin{equation}
+a_{i,\text{local}}^{\star}, \qquad
+a_{i,\text{peer}}^{\star}, \qquad
+a_{i,\text{fused}}^{\star},
+\end{equation}
+并特别关注冲突状态
+\begin{equation}
+a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
+\end{equation}
+在此基础上，表中的“融合策略跟随同伴比例”用于刻画最终决策是否真正跨过本地边界，“有效动作扰动”则用于衡量门控与残差在动作层形成的实际介入强度。
+
+围绕这一问题，本文将稳定通信介入方案的动作层修正过程概括为由“早期低介入阶段”“首次稳定介入阶段”和“稳定动作层介入阶段”组成的三步推进，关键机制指标如表 \ref{tab:action_intervention_path} 所示。
 
 \begin{table}[htbp]
     \centering
-    \caption{攻击通信隔离评估结果（align 配置）}
+    \caption{稳定通信介入方案的关键机制指标}
+    \label{tab:action_intervention_path}
+    {\renewcommand{\arraystretch}{1.18}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{2.6cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
+        \hline
+        阶段 & 攻击门控均值 & 有效动作扰动 & 融合策略跟随同伴比例 & 机制含义 \\
+        \hline
+        早期低介入阶段 & 0.0728 & 0.0006 & 0.0000 & 通信已存在，但几乎不改变最终攻击决策 \\
+        \hline
+        首次稳定介入阶段 & 0.5792 & 0.0922 & 0.0171 & 通信首次稳定进入攻击动作层 \\
+        \hline
+        稳定动作层介入阶段 & 0.5141 & 0.0916 & 0.0141 & 介入力度保持稳定，并避免退回零介入区间 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+表 \ref{tab:action_intervention_path} 所揭示的规律比单纯比较胜率更重要。早期低介入阶段说明“有路由”并不等于“有决策影响”；首次稳定介入阶段说明同伴冲突边际约束与温和暴露已经能够让通信首次稳定进入攻击动作层；稳定动作层介入阶段则进一步表明，本文真正做成的不是把通信做得更强，而是把\textbf{动作层介入}调到一个既可测、又可持续的区间。也正是在这一阶段，算法关注点由“增大全局通信强度”转向“让稳定通信介入方案在更需要介入的状态中稳定生效”。
+
+这一判断也得到了多组负结果的反向支撑。无论是 soft conflict-aware normalized alignment、轻量 gate floor，还是优势引导的基础动作层介入，它们虽然能够在不同程度上提高门控、对数概率改变量或有效动作扰动，但都未能带来稳定的通信隔离增益。这说明“通信能触达动作 logits”只是必要条件，而不是充分条件。
+
+\subsection{训练健康性证据与代表性结果}
+
+从成果定义上看，稳定通信介入方案最重要的贡献并不是“通信经常推翻本地动作”，而是实现了一种\textbf{训练健康、参数可解释、且能够稳定进入动作层}的通信工作区间。对该方案的代表性检查点而言，其 final win 为 $0.9375$，末 5 点平均胜率为 $0.7250$；与此同时，攻击门控均值为 $0.4416$，攻击无通信概率仅为 $0.0069$，攻击注意力熵为 $0.4476$，有效动作扰动为 $0.0740$。这些指标说明，该结果并不是依赖沉默逃逸、门控硬饱和或残差爆炸获得，而是在中等门控、非沉默、健康选择性的工作区间中取得。
+
+进一步地，该方案在三个 seed 上的末段统计可分为性能结果与通信统计两部分，分别如表 \ref{tab:v5b_three_seed_perf} 和表 \ref{tab:v5b_three_seed_comm} 所示。
+
+\begin{table}[htbp]
+    \centering
+    \caption{稳定通信介入方案的三 seed 末段性能统计}
+    \label{tab:v5b_three_seed_perf}
+    {\renewcommand{\arraystretch}{1.18}
+    \setlength{\tabcolsep}{8pt}
+    \begin{tabular}{|c|c|c|}
+        \hline
+        Seed & final win & last5 win \\
+        \hline
+        1 & 0.6250 & 0.5625 \\
+        \hline
+        2 & 0.9375 & 0.7250 \\
+        \hline
+        3 & 0.6250 & 0.6375 \\
+        \hline
+        Mean & 0.7292 & 0.6417 \\
+        \hline
+    \end{tabular}}
+\end{table}
+
+\begin{table}[htbp]
+    \centering
+    \caption{稳定通信介入方案的三 seed 末段通信统计}
+    \label{tab:v5b_three_seed_comm}
+    {\renewcommand{\arraystretch}{1.18}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|}
+        \hline
+        Seed & gate last5 & no-comm last5 & entropy last5 & effective delta last5 & fused follow peer last5 \\
+        \hline
+        1 & 0.5364 & 0.0106 & 0.4453 & 0.0930 & 0.0068 \\
+        \hline
+        2 & 0.4416 & 0.0069 & 0.4476 & 0.0740 & 0.0243 \\
+        \hline
+        3 & 0.5642 & 0.0075 & 0.4356 & 0.1077 & 0.0113 \\
+        \hline
+        Mean & 0.5141 & 0.0083 & 0.4428 & 0.0916 & 0.0141 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+表 \ref{tab:v5b_three_seed_perf} 和表 \ref{tab:v5b_three_seed_comm} 表明，这条主线在三个独立 seed 上都维持了相似的通信工作区间：攻击无通信概率始终低于 $0.011$，说明攻击流没有重新退回沉默；攻击门控均值稳定在 $0.44\sim0.56$ 之间，说明通信被持续使用但并未依赖门控顶格；攻击注意力熵维持在约 $0.44$，说明路由既没有再次塌缩，也没有回到无差别平均；有效动作扰动稳定为正，说明通信残差已经真实进入攻击动作层。
+
+为了进一步说明这不是“性能好但通信乱”，而是“通信确实按设计工作”，本文把能够直接支撑“训练健康性”的关键指标汇总为表 \ref{tab:healthy_comm_stats}。
+
+\begin{table}[htbp]
+    \centering
+    \caption{稳定通信介入方案的训练健康性证据（3 seed 末段平均）}
+    \label{tab:healthy_comm_stats}
+    {\renewcommand{\arraystretch}{1.20}
+    \setlength{\tabcolsep}{7pt}
+    \begin{tabularx}{0.96\textwidth}{|p{3.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
+        \hline
+        指标 & 数值 & 说明 \\
+        \hline
+        攻击无通信概率 & 0.0083 & 攻击流没有通过“无通信”选项退回沉默 \\
+        \hline
+        攻击门控均值 & 0.5141 & 通信被持续使用，但并不依赖硬开门或门控饱和 \\
+        \hline
+        攻击注意力熵 & 0.4428 & 路由保持选择性，既未再次塌缩，也未退化为平均分配 \\
+        \hline
+        有效动作扰动 & 0.0916 & 通信残差已稳定进入攻击动作层，而非停留在隐藏表示内部 \\
+        \hline
+        冲突样本占比 & 0.1326 & 训练过程中确有一部分状态需要区分本地意图与同伴意图 \\
+        \hline
+        不确定性权重 & 0.4805 & 融合暴露并非全局均匀施压，而是保持状态条件调节 \\
+        \hline
+        加权本地置信度 / 本地置信度 & 0.8401 / 0.9120 & 说明融合损失确实更偏向本地更不确定的样本，而非无差别推动所有状态 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+表 \ref{tab:healthy_comm_stats} 给出了本文认为最能支撑“成果已经成立”的一组训练证据。首先，低无通信概率与中等门控均值共同说明通信既没有逃逸，也没有饱和；其次，健康的注意力熵与稳定正值的有效动作扰动说明通信既保持了选择性，又真正到达了动作层；最后，加权本地置信度显著低于原始本地置信度，说明状态条件化暴露的目标并不是一味推高通信强度，而是更偏向那些本地策略本身不够确定的样本。这也是本文将该主线称为“状态条件化动作层介入”而非“强覆盖式通信”的原因。
+
+\subsection{通信隔离证据与机制说明}
+
+为了确认攻击通信是否真的在执行期产生边际价值，本文对代表性检查点进行了四种执行期对照：保持训练态的正常模式、将攻击门控强制设为 $g=1$ 的强制开门模式、将攻击门控强制设为 $g=0$ 但保留通信前向计算的强制关门模式，以及完全禁用攻击通信流的无攻击通信模式。正常模式与无攻击通信模式的差值用于衡量通信整体边际收益，强制开门与正常模式的差值用于判断门控是否过于保守，强制关门与无攻击通信模式的差值则用于检查门控关闭后是否仍存在残余影响。结果如表 \ref{tab:comm_isolation} 所示。
+
+\begin{table}[htbp]
+    \centering
+    \caption{攻击通信隔离评估结果}
     \label{tab:comm_isolation}
-    \begin{tabular}{|l|c|c|c|c|c|}
+    {\renewcommand{\arraystretch}{1.18}
+    \setlength{\tabcolsep}{7pt}
+    \begin{tabularx}{0.94\textwidth}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}p{2.3cm}|}
         \hline
         Seed & normal & gate\_open & gate\_closed & no\_attack & $\Delta$ (normal $-$ no\_attack) \\
         \hline
         Seed 1 & 0.383 & 0.422 & 0.383 & 0.383 & 0.000 \\
+        \hline
         Seed 2 & 0.750 & 0.766 & 0.750 & 0.750 & 0.000 \\
+        \hline
         Seed 3 & 0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
         \hline
-    \end{tabular}
+    \end{tabularx}}
 \end{table}
 
-通信隔离评估揭示了三个层次的重要发现。
+表 \ref{tab:comm_isolation} 给出两个直接结论。其一，攻击通信并非始终无效，Seed 3 上 normal 相对 no\_attack 的 $+4.7\%$ 差值说明通信确实可以在执行期产生额外收益。其二，这一收益并不由“强制把门控拉满”得到，因为 gate\_open 并未系统性优于 normal，反而在部分 seed 上更差。这意味着训练得到的门控并不是简单的“未被打开”，而更像是一种与主干状态相适配的自调节结果。
 
-\textbf{通信机制的直接证据。} Seed 3 上 $+4.7\%$ 的正向边际贡献（normal $=$ $71.1\%$，no\_attack $=$ $66.4\%$）是攻击通信有效性的最直接证据。该增益并非来自随机波动，而是在四组独立评估之间以稳定差值的形式出现，说明攻击通信在该检查点上确实为集火协同提供了执行期价值。
+结合该方案代表性检查点的同伴目标与本地目标诊断可以进一步看到，当前方案中的通信不仅能够保持非沉默和稳定门控，还已经能够真实进入攻击通信路径，并在部分状态中形成可测量的动作层影响。因此，这组通信隔离结果与前文训练健康性统计是一致的：本文形成的并不是停留在路由或消息层面的“表面激活”，而是一种已经具备可检验执行期作用的稳定通信介入方案。
 
-\textbf{主干质量的前置约束。} Seed 1 的评估胜率（$38.3\%$）远低于训练期间的测试胜率（约 $68\%$），且四种模式结果基本一致，说明问题并不在通信开关本身，而在于通信微调过程中主干局部策略已经发生退化。由此可以看出，当主干本身处于训练动力学的不稳定区间时，引入通信支路会放大优化方向的不确定性。训练阶段较小的测试集规模未能及时暴露这一问题，也说明更大规模评估在通信研究中是必要的。
+\subsection{低通信代价主线与 MAIC/QMIX 的对比}
+\esubsection{Comparison Between the Low-Cost Mainline and MAIC/QMIX}
 
-\textbf{门控自调节具有实际意义。} gate\_open 在三个种子上均未显著提升胜率，且在 seed 3 上反而低于 normal（$65.6\%$ vs $71.1\%$）。这说明训练得到的门控值（约 $0.06$）并不是“门没有学开”，而是当前策略状态下较为合理的融合水平。强制放大门控只会额外放大噪声，并不会自动转化为更高的协同收益。
-
-\subsection{通信到动作介入的边界分析}
-\esubsection{Boundary Analysis of Communication-to-Action Leverage}
-
-在完成沉默预算与意图对齐实验后，本文进一步进行了一组边界诊断，用于回答一个更关键的问题：如果攻击通信已经具备非沉默、非平均化且带有协同语义的消息结构，那么后续瓶颈究竟还在“如何采样或对齐消息”，还是已经转移到“通信如何实际改变动作 logits”。
-
-\textbf{软冲突对齐并未解决动作层收益问题。} 在 hard conflict-aware alignment 中，只有少量不确定或冲突样本被保留，导致梯度高度稀疏且种子敏感。为避免该问题，本文进一步测试了 soft conflict-aware normalized alignment：保留基础有效样本，并使用
-\begin{equation}
-w_i^t = \mathbb{I}_{\text{valid}}\left(0.2+0.8\max(u_i^t,c_i^t)\right)
-\end{equation}
-作为软权重，其中 $u_i^t$ 和 $c_i^t$ 分别表示本地不确定性与局部-通信冲突程度，同时损失分母使用基础有效样本数而非被选样本数。该设计确实缓解了 hard mask 的样本稀疏问题，但通信隔离评估显示 normal $-$ no\_attack 的平均差值仍为 $-1.0\%$，并未产生稳定的执行期正向贡献。这说明对齐采样的平滑化本身并不能自动转化为真实动作层收益。
-
-\textbf{单纯增大介入力度会放大未校准扰动。} 为检验“通信是否只是因为门控太低而影响不到动作”，本文在沉默预算主线上加入极轻量的 attack gate floor：将攻击门控下限设为 $0.05$，并用 $0.20$ 作为上界，避免退化为强制开门。结果如表 \ref{tab:leverage_floor} 所示。
-
-\begin{table}[htbp]
-    \centering
-    \caption{通信强度增强诊断：silence budget 与 gate floor 对比（3 seed 平均）}
-    \label{tab:leverage_floor}
-    \begin{tabular}{|l|c|c|c|c|c|}
-        \hline
-        配置 & 最终胜率 & 末 5 点均值 & 峰值 & 攻击门控 & 有效扰动 \\
-        \hline
-        silence budget & 0.667 & 0.629 & 0.833 & 0.071 & $\approx 6.4{\times}10^{-4}$ \\
-        \hline
-        gate floor & 0.479 & 0.558 & 0.813 & 0.122 & $1.2{\times}10^{-3}$ \\
-        \hline
-    \end{tabular}
-\end{table}
-
-实验表明，gate floor 确实将攻击门控从 $0.071$ 提升至 $0.122$，有效 logit 扰动也约翻倍；但最终胜率却从 $0.667$ 降至 $0.479$，三个种子中有两个出现显著退化。与此同时，攻击无通信概率仍保持在约 $0.3\%$--$0.4\%$，攻击熵也维持在健康区间。这说明失败并非来自路由坍缩或沉默逃逸，而是来自残差方向本身尚未被校准；更大的通信注入强度只会更稳定地放大未校准扰动，从而伤害已有主干。
-
-\textbf{优势引导杠杆证明了“可触达”，但没有证明“有因果价值”。} 基于上述发现，本文进一步测试优势引导的攻击动作杠杆：仅在正优势攻击样本上，鼓励通信融合后的策略比本地策略更支持实际采取的攻击动作。初始平方惩罚版本几乎没有激活该机制，攻击动作对数概率改变量仅约 $1.2\times10^{-5}$，有效动作扰动约 $4.35\times10^{-4}$。随后改用 Huber 惩罚后，机制指标明显增强：攻击门控提升至 $0.171$，有效动作扰动提升至 $4.95\times10^{-3}$，攻击动作对数概率改变量提升至 $5.00\times10^{-4}$，且无通信概率仍被压制在约 $1.5\%$。这说明 Huber 杠杆确实让通信残差更稳定地进入动作 logits。
-
-\begin{table}[htbp]
-    \centering
-    \caption{Advantage-guided leverage 诊断结果（3 seed 平均）}
-    \label{tab:adv_leverage_huber}
-    \begin{tabular}{|l|c|c|c|c|c|c|}
-        \hline
-        配置 & final & last10 & 攻击门控 & 有效扰动 & $\Delta\log p$ & 隔离增益 \\
-        \hline
-        silence budget & 0.667 & 0.581 & 0.071 & -- & -- & -- \\
-        \hline
-        squared leverage & 0.604 & 0.588 & 0.067 & $4.35{\times}10^{-4}$ & $1.18{\times}10^{-5}$ & -- \\
-        \hline
-        Huber leverage & 0.688 & 0.573 & 0.171 & $4.95{\times}10^{-3}$ & $5.00{\times}10^{-4}$ & $-0.005$ \\
-        \hline
-    \end{tabular}
-\end{table}
-
-然而，对 Huber leverage 的 128 局通信隔离评估给出了更严格的负结果：三 seed 平均 normal 胜率为 $0.4375$，no\_attack 为 $0.4427$，normal $-$ no\_attack 的平均差值为 $-0.52\%$；gate\_open 平均为 $0.4505$，仅比 normal 高 $1.30\%$，且主要来自单个 seed 的小幅波动。同时，gate\_closed 与 no\_attack 在三个 seed 上完全一致，说明诊断开关链路本身是可信的。由此可以得出更克制但也更重要的结论：Huber leverage 证明了“通信可以触达动作 logits”，但没有证明“通信触达的是有因果价值的动作决策”。
-
-\subsection{从动作层杠杆到状态条件化暴露}
-\esubsection{From Action-Level Leverage to State-Conditioned Exposure}
-
-上述负结果推动本文进一步重新审视攻击通信的核心瓶颈。至此已经可以排除几类早期解释：其一，问题不再是攻击通信流完全沉默；其二，问题也不再是攻击注意力完全失活；其三，问题甚至不再只是门控过低，因为 Huber leverage 已经证明通信残差可以稳定进入动作 logits。真正剩下的问题变成了：通信是否在\emph{应当介入的状态}中改变动作，以及这种改变是否沿着正确方向发生。
-
-基于这一判断，本文后续主线从“继续加大全局通信作用力”转向“只在同伴目标与本地目标冲突且本地策略较不确定的状态中增强通信介入力度”。为便于说明，下文将这一阶段的发展概括为
-\begin{equation}
-\text{sign-split}
-\rightarrow
-\text{v4 mild fused exposure}
-\rightarrow
-\text{v5 margin-near exposure}
-\rightarrow
-\text{v5b stable exposure}.
-\end{equation}
-
-\textbf{基线介入阶段（sign-split）：通信存在，但几乎不改变动作。} 以 \texttt{v6\_attack\_top2\_selective\_silencebudget\_signsplit\_correction} 为代表的 sign-split 配置已经具备健康的非沉默通信结构：三 seed 平均无通信概率约为 $0.0019$，同伴目标冲突率约为 $0.1130$，说明同伴意图已经存在，也并非总与本地目标重合。然而“同伴目标与本地目标对照”诊断进一步显示，冲突状态下的融合策略跟随同伴比例为 $0.0000$，融合策略保持本地目标比例为 $1.0000$，有效动作扰动仅约 $6\times10^{-4}$。这说明该阶段的核心问题不是通信缺失，而是通信虽然被路由出来，却几乎没有跨过动作决策边界。
-
-\textbf{温和暴露阶段（v4）：通信首次稳定进入动作层。} 为修复 sign-split 的零作用问题，本文在 v4 中保留 silence budget，并加入轻量的同伴冲突边际杠杆与温和融合暴露。其诊断均值显示：攻击门控均值从 sign-split 的 $0.0728$ 提升至 $0.5792$，有效动作扰动从 $0.0006$ 跃升至 $0.0922$，仅攻击通信路径的跟随同伴比例提升至 $0.0352$，融合策略跟随同伴比例也首次达到 $0.0171$。这说明通信已经不再停留在“有路由但碰不到动作”的阶段，而是第一次以可测量的方式进入攻击动作决策回路。然而，v4 的融合策略保持本地目标比例仍高达 $0.9805$，说明最终决策仍以本地策略为主导。
-
-\textbf{近边界暴露阶段（v5）：让融合介入更偏向本地不确定状态。} 在 v4 的基础上，本文进一步引入本地置信度感知的融合加权。其核心思想不是盲目让通信更强，而是让融合路径在本地边际更小、本地 top-1 置信度更低的状态中承受更强的同伴冲突压力。相较 v4，这一步使通信介入从“全局温和暴露”转向“靠近决策边界的暴露”，并在部分 seed 上提升了融合策略跟随同伴的频率。然而，v5 也暴露出新的不稳定性：最小权重过低时，一些 seed 会重新掉回低介入状态，说明状态条件化虽然是正确方向，但融合暴露下限仍然过弱。
-
-\textbf{稳定暴露阶段（v5b）：在近边界机制上补足最小介入下限。} 为回答“v5 的不稳定是否只是因为融合暴露下限过低”这一更窄的问题，本文进一步构造 v5b：保留近边界、面向不确定性的融合暴露框架，仅将最小不确定性权重由 $0.2$ 提升到 $0.4$，同时保持
-\begin{equation}
-\texttt{attack\_peer\_conflict\_fused\_local\_conf\_max}=0.90.
-\end{equation}
-这一步并不引入新的机制，而只是测试一个很小的稳定化修正：在本地高置信状态中仍保留一部分最小融合暴露，避免某些 seed 因融合权重过低而重新退化到“通信碰不到动作”的工作区间。
-
-\subsection{主线结果与机制边界分析}
-\esubsection{Mainline Results and Mechanism Boundary Analysis}
-
-v5b 的三 seed 通信统计如表 \ref{tab:v5b_three_seed} 所示。
-
-\begin{table}[htbp]
-    \centering
-    \caption{v5b 三个 seed 的末段通信统计}
-    \label{tab:v5b_three_seed}
-    \begin{tabular}{|l|c|c|c|c|c|c|c|}
-        \hline
-        Seed & final win & last5 win & gate last5 & no-comm last5 & entropy last5 & effective delta last5 & fused follow peer last5 \\
-        \hline
-        1 & 0.6250 & 0.5625 & 0.5364 & 0.0106 & 0.4453 & 0.0930 & 0.0068 \\
-        \hline
-        2 & 0.9375 & 0.7250 & 0.4416 & 0.0069 & 0.4476 & 0.0740 & 0.0243 \\
-        \hline
-        3 & 0.6250 & 0.6375 & 0.5642 & 0.0075 & 0.4356 & 0.1077 & 0.0113 \\
-        \hline
-        Mean & 0.7292 & 0.6417 & 0.5141 & 0.0083 & 0.4428 & 0.0916 & 0.0141 \\
-        \hline
-    \end{tabular}
-\end{table}
-
-这张表有三个关键含义。第一，v5b 维持了健康的非沉默结构：末 5 点平均无通信概率仅约 $0.0083$。第二，v5b 将通信介入力度拉回了较强且稳定的区间：末 5 点平均门控约为 $0.51$，末 5 点平均有效动作扰动约为 $0.092$，基本回到 v4 的强介入区间。第三，v5b 并没有把系统推向极端的同伴主导决策：末 5 点平均融合策略跟随同伴比例只有 $0.0141$，说明最终策略仍然保持保守。
-
-与 v5 相比，v5b 更像是一个“通信作用调稳”版本，而不是一个“让通信更激进地主导决策”的版本。其三 seed 平均 final win 从 $0.6042$ 提升至 $0.7292$，last5 win 从 $0.5750$ 提升至 $0.6417$，同时门控、有效动作扰动与融合权重都明显上升。换言之，v5b 的主要贡献不是让通信更频繁地推翻本地决策，而是让通信对动作决策的介入力度不再在不同 seed 上忽强忽弱。
-
-在这一主线上，\texttt{v5b seed2} 最适合作为论文中的代表性结果展示。其 final win 达到 $0.9375$，last5 win 为 $0.7250$，last5 return 为 $17.2901$；更重要的是，它的通信参数处于较为干净的区间：gate last5 为 $0.4416$，no-comm last5 为 $0.0069$，entropy last5 为 $0.4476$，effective delta last5 为 $0.0740$。这说明该模型检查点并不是靠沉默逃逸、门控饱和或残差爆炸换来的高分，而是在中等门控、健康熵值、非沉默的工作区间中取得了最强结果。
-
-然而，\texttt{v5b seed2} 同时也明确暴露出本文当前最重要的边界。其 fused follow-peer last5 虽提升至 $0.0243$，attack-only follow-peer last5 为 $0.0400$，但 fused stay-local last5 仍高达 $0.9751$，fused log-prob margin 仍显著为负。这意味着通信已经稳定进入动作层，但绝大多数冲突状态下最终攻击决策仍由本地策略主导。换句话说，v5b 修复的是通信介入不足的瓶颈，而不是最终的因果性决策改变瓶颈。
-
-基于这一点，本文选择 \texttt{v5b seed2} 作为论文主线展示对象的原因，并不是“它证明通信已经解决了动作层因果性”，而是它同时满足三个更适合作为论文主线的条件：其一，通信参数健康；其二，通信机制已经以可测量方式进入动作层；其三，剩余边界清晰且可诊断。这比选择一个更激进但机制不够干净的模型检查点，更适合作为论文的核心叙事。
-
-\subsection{跨地图补充验证：\texttt{MMM2} 与 \texttt{2c\_vs\_64zg}}
-\esubsection{Cross-Map Supplementary Validation on \texttt{MMM2} and \texttt{2c\_vs\_64zg}}
-
-在 \texttt{5m\_vs\_6m} 主实验之外，本文进一步选择 \texttt{MMM2} 与 \texttt{2c\_vs\_64zg} 作为跨地图补充验证对象。这两张图的作用不是替代主实验，而是回答一个更克制的问题：当前轻量双流通信主线是否只在单一地图上成立，还是在不同协作结构下仍能表现出正向收益。
-
-\textbf{\texttt{MMM2}：通信收益依赖 Backbone 能力阈值。}
-在 \texttt{MMM2} 上，本文围绕同一 Backbone 主干完成了两轮等预算对照。第一轮从较早的主干检查点出发时，通信热启动并不优于同预算的纯 Backbone continuation；第二轮从更强的 Backbone 检查点出发时，通信线则明显优于同预算 Backbone continuation。具体而言，在更强起点上，通信 continuation 达到约 $0.1312$ 的测试胜率和 $11.7212$ 的平均回报，而同预算 Backbone continuation 仅约为 $0.0063$ 和 $9.4884$。这一结果表明，在 \texttt{MMM2} 这类高异质地图上，通信收益不是沿训练过程单调存在的，而是与 Backbone 是否已进入更强协作区间密切相关。
-
-\textbf{\texttt{2c\_vs\_64zg}：强 Backbone 上的更干净正例。}
-在 \texttt{2c\_vs\_64zg} 上，本文从相同的强 Backbone 检查点出发，比较通信 continuation 与同预算纯 Backbone continuation。结果显示，通信线在末段持续抬升，最终达到 $0.7625$ 的测试胜率和 $20.1492$ 的平均回报；相比之下，纯 Backbone continuation 的最好结果约为 $0.5625$ 和 $19.4775$，末段大多回落至 $0.46$--$0.51$ 的胜率区间。这说明在该图上，当前通信主线不仅能够在强 Backbone 基础上提供额外收益，而且这种收益是在同起点、同预算的公平对照下成立的。
-
-\textbf{跨地图结果的整体含义。}
-\texttt{MMM2} 与 \texttt{2c\_vs\_64zg} 共同提供了一个比“通信普遍有效”更准确的结论：当前方法的跨图增益是成立的，但其表现形式依赖任务结构。\texttt{MMM2} 强调的是通信有效性对 Backbone 能力阈值的敏感性；\texttt{2c\_vs\_64zg} 强调的是在强 Backbone 条件下，通信可以稳定优于同预算纯 continuation。二者与 \texttt{5m\_vs\_6m} 主线结果相结合，支撑了本文的核心叙事：所提出的轻量双流通信框架并非仅在单一地图上偶然生效，而是在不同复杂协作结构下都表现出可迁移的正向收益。
-
-\subsection{低通信代价主线与仓库内 MAIC 的对比}
-\esubsection{Comparison Between the Low-Cost Mainline and the In-Repo MAIC}
-
-在明确 \texttt{v5b seed2} 是当前最适合作为论文主线的代表性结果之后，本文进一步关心一个更工程化的问题：这一主线是否依赖于较大的总体执行期通信预算。基于第三章定义的执行期通信代价以及总预算
+在机制已经较为稳定之后，本文进一步关心当前主线是否依赖较高的执行期通信预算。按照第三章给出的口径，单流执行期通信代价定义为
 \begin{equation}
 C_{\mathrm{exec}} = p_{\mathrm{comm}} \cdot k \cdot d_{\mathrm{exec}},
 \end{equation}
-以及
+双流总预算则为
 \begin{equation}
-C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}},
+C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
 \end{equation}
-本文对当前主线与本仓库内的 MAIC 实现进行了粗粒度对比，结果如表 \ref{tab:comm_cost_compare} 所示。
+基于这一口径，本文将该方案的代表性检查点与仓库内 MAIC 实现进行粗粒度比较，结果如表 \ref{tab:comm_cost_compare} 所示。
 
 \begin{table}[htbp]
     \centering
-    \caption{SMAC \texttt{5m\_vs\_6m} 上总体执行期通信代价的粗粒度对比}
+    \caption{SMAC \texttt{5m\_vs\_6m} 上执行期通信代价的粗粒度对比}
     \label{tab:comm_cost_compare}
-    \begin{tabular}{|p{3.6cm}|p{3.8cm}|c|c|c|c|c|c|}
+    \begin{tabular}{|p{3.9cm}|p{4.2cm}|c|c|c|c|}
         \hline
-        方法 & 路由形态 & $p_{\mathrm{comm}}$ & $k$ & $d_{\mathrm{exec}}$ & $C_{\mathrm{exec}}$ & $\rho_{\mathrm{topo}}$ & $\rho_{64}$ \\
+        方法 & 路由形态 & $p_{\mathrm{comm}}$ & $k$ & $d_{\mathrm{exec}}$ & 执行期通信代价 \\
         \hline
-        本文 \texttt{v5b seed2} 攻击流 & top-2 selective + no-comm & 0.9931 & 2 & 8 & 15.9 & 0.4966 & 0.0621 \\
+        本文方案攻击流 & 选择性 top-$2$ + 可沉默 & 0.9931 & 2 & 8 & 15.9 \\
         \hline
-        本文 \texttt{v5b seed2} 移动流 & top-2 sparse + high silence & 0.3418 & 2 & 8 & 5.47 & 0.1709 & 0.0214 \\
+        本文方案移动流 & 稀疏 top-$2$ + 高沉默 & 0.3418 & 2 & 8 & 5.47 \\
         \hline
-        本文 \texttt{v5b seed2} 总预算 & stream-wise sum & -- & -- & -- & 21.36 & 0.3337 & 0.0834 \\
+        本文方案总预算 & 双流合计 & -- & -- & -- & 21.36 \\
         \hline
-        Repo MAIC & dense all-to-all targeted action bias & 1.0000 & 4 & 12 & 48.0 & 1.0000 & 0.1875 \\
-        \hline
-        稀疏 MAPPO 参考配置 & top-3 sparse comm & 1.0000 & 3 & 4 & 12.0 & 0.7500 & 0.0469 \\
-        \hline
-        64 维稠密广播参考线 & dense all-to-all hidden-state broadcast & 1.0000 & 4 & 64 & 256.0 & 1.0000 & 1.0000 \\
+        Repo MAIC & 稠密全连接动作偏置 & 1.0000 & 4 & 12 & 48.0 \\
         \hline
     \end{tabular}
 \end{table}
 
-表 \ref{tab:comm_cost_compare} 中，攻击流与移动流分开统计，因为这两个通信支路承担的功能不同。对 \texttt{v5b seed2} 而言，末段日志给出 attack no-comm probability 约为 $0.0069$，move no-comm probability 约为 $0.6582$，因此
-\begin{equation}
-p_{\mathrm{comm}} \approx 1 - 0.0069 = 0.9931.
-\end{equation}
-结合其 top-$2$ 选择性路由和 $8$ 维攻击消息，可得
-\begin{equation}
-C_{\mathrm{exec}}^{\text{ours, attack}}
-\approx
-0.9931 \times 2 \times 8
-\approx 15.9.
-\end{equation}
-移动流同样采用 $d_{\mathrm{move}}=8$ 和 $k_{\mathrm{move}}=2$，但其目标是保留更高的按需沉默比例，因此
-\begin{equation}
-C_{\mathrm{exec}}^{\text{ours, move}}
-\approx
-(1-0.6582)\times2\times8
-\approx 5.47.
-\end{equation}
-两者相加得到总预算
-\begin{equation}
-C_{\mathrm{total}}^{\text{ours}}
-\approx 21.36.
-\end{equation}
-这意味着在给定单边消息维度的情况下，攻击流和移动流分别承担了不同强度的通信作用；若进一步以“向其余 $4$ 个队友广播 $64$ 维 hidden state”的稠密方案为参照，则总预算的归一化代价仅为
-\begin{equation}
-\rho_{64}^{\text{ours, total}}
-=
-\frac{21.36}{4\times 64}
-\approx 8.3\%.
-\end{equation}
-
-相比之下，仓库内 MAIC 的低维潜变量并不能直接视为执行期通信带宽。其配置中的 \texttt{latent\_dim=8} 主要服务于内部队友建模，而在执行期真正送入同伴决策支路的是一个对每个发送者-接收者对应的动作偏置向量。结合仓库实现可知，MAIC 最终返回的是局部 $Q$ 值与稠密注意力加权动作偏置的和，因此在 \texttt{5m\_vs\_6m} 上，更合适的执行期消息维度口径是 $d_{\mathrm{exec}} = n_{\mathrm{actions}} = 12$。同时，该实现不包含 top-$k$ 稀疏选择，也不包含显式无通信标记，因此其执行期通信代价可近似写为
-\begin{equation}
-C_{\mathrm{exec}}^{\text{MAIC}}
-=
-1 \times 4 \times 12
-= 48.
-\end{equation}
-
-据此可得一个对本文叙事十分重要的结论：在相同 \texttt{5m\_vs\_6m} 环境上，当前 \texttt{v5b seed2} 的总执行期通信预算大约仅为 repo MAIC 的一半左右：
+表 \ref{tab:comm_cost_compare} 表明，稳定通信介入方案并不是依赖高带宽广播获得收益。对该方案的代表性检查点而言，攻击流几乎总是参与通信，但消息维度仅为 8 且采用 top-$2$ 选择性路由；移动流则保留较高的按需沉默率。两者相加后的总预算约为 $21.36$，仅相当于 repo MAIC 粗粒度执行期预算 $48.0$ 的
 \begin{equation}
 \frac{21.36}{48} \approx 44.5\%.
 \end{equation}
-因此，本文当前主线方法的优势并不是依赖于高带宽的全连接隐藏状态广播，而是在显著更低的总体执行期通信代价下，通过选择性路由、沉默预算和动作层残差注入，获得了稳定的通信机制与当前最强的代表性结果。
+因此，本文更适合表述为“在较低执行期通信代价下实现了稳定动作层介入”，而不是“依赖大带宽通信换取性能”。
 
-当然，这一对比也应当谨慎理解。首先，表 \ref{tab:comm_cost_compare} 比较的是执行期通信载体，而不是训练期总复杂度，因此没有把 MAIC 的互信息目标和额外推断网络开销计入同一张表。其次，本文当前已经使用了完整双流总预算，但仍保留逐流拆分，这是因为攻击流与移动流的语义和目标不同，单一的总体无通信平均值并不能替代逐流解释。换言之，这张表支持的不是“本文整体系统绝对最省”，而是一个更克制但更可靠的结论：当前最强主线是在真正低通信代价的工作区间中取得的，且其低成本不是表面上的“潜变量维度很小”，而是来自攻击流的稳定介入、移动流的高按需沉默、top-$k$ 稀疏激活和低维消息共同作用的结果。
+这里也需要说明，这一比较只针对执行期通信载体，并不等同于训练期开销的全面比较。尤其对 MAIC 而言，潜变量维度本身并不能直接代表执行期带宽，更合适的口径是实际注入接收端决策支路的动作偏置维度。本文在这一口径下进行比较，目的并非声称绝对最省，而是说明当前主线确实工作在一个较低通信预算区间内。
 
-\subsection{后续因果修正的边界分析}
-\esubsection{Boundary Analysis of Subsequent Causal Refinements}
+进一步地，若将性能轨迹一并纳入比较，则可以更直观地看到稳定通信介入方案与两类典型基线之间的关系。图 \ref{fig:mainline_maic_qmix} 给出了本文两阶段稳定通信介入方案、续跑至约 $2.0$M 步的 MAIC，以及从 $0$ 开始训练至约 $2.0$M 步的 QMIX 在 \texttt{5m\_vs\_6m} 上的测试胜率曲线。其中，红色虚线表示本文方案由无通信主干进入第二阶段轻量通信微调的位置。
 
-在 v5b 之后，本文继续尝试了更直接的 bad-action correction 与 causal decision-change 修正，例如在保持 v5b 稳定介入力度设定的基础上引入更强的 \texttt{bad-action decision change} 分支。其结果表明，仅继续增加介入压力并不会自动把通信变成更好的因果决策器：某些 seed 的 gate 与 effective delta 虽然继续升高，但 final win、last5 win 以及 fused follow-peer 反而下降。这进一步佐证了当前主线的核心判断：更强的通信作用力本身并不是答案，状态选择才是答案。
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.98\textwidth]{generated/mainline_maic_qmix_comparison.png}
+    \caption{SMAC \texttt{5m\_vs\_6m} 上稳定通信介入方案、MAIC 与 QMIX 的完整训练轨迹对比}
+    \label{fig:mainline_maic_qmix}
+\end{figure}
 
-因此，围绕最新主线可以得出一个比“通信有效/无效”更细的结论：
-\begin{enumerate}
-    \item 本文已经修复了攻击通信的沉默逃逸与零介入问题，同时保留了移动流的高按需沉默特性；
-    \item 本文已经让通信残差以稳定、可测量的方式进入攻击动作 logits；
-    \item 但本文尚未让通信在大多数冲突状态中稳定跨越本地决策边界；
-    \item 因而当前未解的关键问题，不是通信介入力度，而是因果性决策改变。
-\end{enumerate}
+图 \ref{fig:mainline_maic_qmix} 支持三个直接判断。首先，QMIX 在该任务上的整体上升较慢，至约 $2.0$M 步时 final win 仅为 $0.4688$，说明在这一高度协作且部分可观测的任务上，经典值分解基线难以获得足够强的执行期协同能力。其次，MAIC 在续跑至约 $2.0$M 步后可以达到 $0.7188$ 的 final win 和 $0.9063$ 的 peak win，表明显式通信与队友建模确实能够显著优于无通信值分解基线。最后，本文稳定通信介入方案在更低的执行期通信预算下达到 $0.9375$ 的 final win，说明本文方法的优势并不只是“是否使用通信”，而是把通信约束在较低成本区间内，并使其稳定进入动作层。
 
-综合来看，silence budget、同伴冲突边际杠杆与不确定性感知的融合暴露共同构成了本文当前最稳的攻击通信主线；而 soft alignment、gate floor、Huber leverage 以及更激进的 bad-action 修正则共同划出了该主线的能力边界。后续算法改进应继续围绕状态条件化的通信因果性建模展开：识别本地策略不确定、同伴目标与本地目标冲突、或本地即将执行错误攻击的状态，并让通信只在这些具有潜在因果价值的状态中介入，而不是全局性地让通信“更强”。
+\subsection{跨地图补充验证}
+\esubsection{Supplementary Cross-Map Validation}
+
+除 \texttt{5m\_vs\_6m} 主实验外，本文还在 \texttt{MMM2} 与 \texttt{2c\_vs\_64zg} 上进行了补充验证。这两张图的作用不是替代主实验，而是检验当前主线是否只在单一地图上偶然成立。图 \ref{fig:cross_map_equalbudget} 以“共同主干轨迹 + 分叉点 + 两条等预算续跑”的方式展示了两张地图上的对照关系，其中灰色曲线表示通信介入前的共同主干轨迹，虚线表示热启动分叉点，红色与蓝色曲线分别表示加入通信和不加通信的后续训练结果。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.96\textwidth]{generated/cross_map_equalbudget_comparison.png}
+    \caption{跨地图等预算分叉对照：共同主干轨迹与通信/无通信续跑结果}
+    \label{fig:cross_map_equalbudget}
+\end{figure}
+
+在 \texttt{MMM2} 上，等预算对照表明通信收益依赖于主干能力阈值。图中可以看到，从较弱主干检查点过早介入时，通信热启动并不优于纯主干续跑；而当主干沿共同轨迹继续提升后，再从更强检查点分叉，通信线在后续训练中可上升到约 $0.1312$ 的测试胜率，而纯主干续跑仅在起始阶段短暂保留原有水平，随后快速回落至接近 $0$。这说明在高异质协作地图上，通信收益并非沿训练过程单调存在，而是依赖主干是否已经进入更强的协作区间。
+
+在 \texttt{2c\_vs\_64zg} 上，当前主线则给出了更干净的正例。从同一强主干检查点分叉后，通信续跑在后段持续抬升并最终达到 $0.7625$ 的测试胜率；相比之下，纯主干续跑虽在中前段出现过短暂反弹，但整体未能维持上升趋势，末段回落至约 $0.5063$。这说明在强主干条件下，轻量通信框架能够在不同战术结构下提供额外收益。
+
+综合来看，跨地图实验支持一个更克制但更可靠的结论：本文方法的增益不是普遍、无条件成立的，但也并非局限于 \texttt{5m\_vs\_6m} 单一地图；其有效性与主干成熟度和任务结构共同相关。
 
 \section{本章小结}
 \esection{Chapter Summary}
 
-本章首先在 \texttt{join1} 环境中验证了通信机制既可能带来显著收益，也可能由于结构设计不当而完全失效。随后，本文在 SMAC \texttt{5m\_vs\_6m} 环境中构建了较强的 vanilla MAPPO 主干，系统分析了主干训练的崩溃-恢复动力学和种子敏感性，并在此基础上发现了冷启动通信的结构性失败。
+本章首先在 \texttt{join1} 中验证了通信机制并非天然有效，而是依赖消息、路由与融合方式的共同配合。随后，在 SMAC \texttt{5m\_vs\_6m} 上，本文通过无通信热启动对照和冷启动失败分析，确立了一个贯穿全文的前提：显式通信的研究必须建立在稳定主干之上，否则通信增益无法与主干继续学习区分开来。
 
-针对冷启动通信失败，本文进行了 8 组递进式实验，涵盖 IGG、固定门控、通信 warm-up、门控退火和 hidden-state fusion 等多种策略。实验揭示了门控-学习率同构性这一关键洞察，说明门控值在功能上等价于通信学习率。
+在此基础上，本文围绕攻击通信形成了较清晰的稳定通信介入方案。前半段通过路由稳定化、沉默预算与意图对齐，解决了攻击流的平均化、沉默逃逸和语义空洞问题；后半段通过同伴冲突边际约束和状态条件化暴露，使通信首次稳定进入动作层，并最终在该方案的代表性检查点上获得了健康参数区间下的代表性结果。与此同时，同伴目标与本地目标因果诊断也清楚表明，当前尚未彻底解决的问题不是“通信是否存在”，而是“通信是否在正确状态下改变最终决策”。
 
-进一步，本文对攻击通信流进行了系统性机制修复：先通过路由稳定化、沉默预算和意图对齐建立稳定的非沉默协同结构，再完成从 sign-split 到 v4、v5、v5b 的动作层主线推进：先证明通信不再停留于“存在但不起作用”的状态，再证明通信第一次稳定进入动作决策回路，最后通过近边界、面向不确定性的融合暴露将跨 seed 的通信介入力度调稳。其中 \texttt{v5b seed2} 作为当前最适合作为论文主线的代表性结果，展示了健康的通信参数、稳定的动作层介入，以及“causal decision-change 尚未彻底解决”的清晰边界。
-
-这些结果共同表明，通信性能提升并不等价于执行期通信因果贡献的稳定增强。特别是 Huber leverage 与后续更激进的 causal 修正都证明：即使通信已经触达动作 logits，若缺少更精细的状态选择，它仍未必会在正确的时刻沿正确方向改变最终决策。因此，后续改进应继续转向状态条件化的通信因果性建模。
-
-这些发现共同确立了本文的核心论点：轻量、语义明确的通信机制能够产生真实协同价值，但该价值的释放依赖于主干稳定性、动作层融合方向以及介入状态选择的共同满足。当主干本身处于训练动力学的不稳定期，或通信残差在不具因果价值的状态中被全局放大时，通信支路会放大优化噪声。这一认识将通信研究的焦点从“设计更强的通信”转向“设计更可控、更具因果针对性的通信”。
+因此，本章支撑的核心结论并不是“更强通信一定更好”，而是“低代价、语义明确且状态条件化的通信，已经能够稳定介入动作层，但其因果性决策改变仍有待进一步建模”。这一定义了稳定通信介入方案的有效范围，也为后续研究方向提供了明确边界。
