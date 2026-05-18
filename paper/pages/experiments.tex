@@ -118,6 +118,9 @@ g\cdot
     \centering
     \caption{攻击通信主线的关键修复结果（3 seed 平均）}
     \label{tab:attack_repair}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{7pt}
     \begin{tabular}{|l|c|c|c|c|}
         \hline
         配置 & 攻击熵 & 无通信概率 & 攻击门控 & 平均峰值胜率 \\
@@ -133,6 +136,7 @@ g\cdot
         路由稳定化 + 沉默预算 + 意图对齐 & 0.449 & 0.010 & 0.067 & 0.746 \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
 表 \ref{tab:attack_repair} 表明，真正带来改善的不是单纯放宽路由结构，而是一条更克制的修复路径：先让攻击流从“平均化或沉默”回到“持续参与”，再让消息语义逐步靠近同伴攻击意图。在这一阶段之后，问题的重点也随之变化，不再是“是否有通信”，而是“通信是否已经进入动作层并形成真实影响”。
@@ -152,6 +156,7 @@ a_{i,\text{fused}}^{\star},
 a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
 \end{equation}
 在此基础上，表中的“融合策略跟随同伴比例”用于刻画最终决策是否真正跨过本地边界，“有效动作扰动”则用于衡量门控与残差在动作层形成的实际介入强度。
+相关辅助损失与诊断指标的完整定义见附录。
 
 围绕这一问题，本文将稳定通信介入方案的动作层修正过程概括为由“早期低介入阶段”“首次稳定介入阶段”和“稳定动作层介入阶段”组成的三步推进，关键机制指标如表 \ref{tab:action_intervention_path} 所示。
 
@@ -159,7 +164,8 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \centering
     \caption{稳定通信介入方案的关键机制指标}
     \label{tab:action_intervention_path}
-    {\renewcommand{\arraystretch}{1.18}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
     \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{2.6cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
         \hline
@@ -188,7 +194,8 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \centering
     \caption{稳定通信介入方案的三 seed 末段性能统计}
     \label{tab:v5b_three_seed_perf}
-    {\renewcommand{\arraystretch}{1.18}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{8pt}
     \begin{tabular}{|c|c|c|}
         \hline
@@ -209,7 +216,8 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \centering
     \caption{稳定通信介入方案的三 seed 末段通信统计}
     \label{tab:v5b_three_seed_comm}
-    {\renewcommand{\arraystretch}{1.18}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
     \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|}
         \hline
@@ -227,6 +235,7 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
 \end{table}
 
 表 \ref{tab:v5b_three_seed_perf} 和表 \ref{tab:v5b_three_seed_comm} 表明，这条主线在三个独立 seed 上都维持了相似的通信工作区间：攻击无通信概率始终低于 $0.011$，说明攻击流没有重新退回沉默；攻击门控均值稳定在 $0.44\sim0.56$ 之间，说明通信被持续使用但并未依赖门控顶格；攻击注意力熵维持在约 $0.44$，说明路由既没有再次塌缩，也没有回到无差别平均；有效动作扰动稳定为正，说明通信残差已经真实进入攻击动作层。
+更完整的三 seed 末段诊断统计见附录。
 
 为了进一步说明这不是“性能好但通信乱”，而是“通信确实按设计工作”，本文把能够直接支撑“训练健康性”的关键指标汇总为表 \ref{tab:healthy_comm_stats}。
 
@@ -234,7 +243,8 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \centering
     \caption{稳定通信介入方案的训练健康性证据（3 seed 末段平均）}
     \label{tab:healthy_comm_stats}
-    {\renewcommand{\arraystretch}{1.20}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{7pt}
     \begin{tabularx}{0.96\textwidth}{|p{3.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
         \hline
@@ -261,28 +271,26 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
 
 \subsection{通信隔离证据与机制说明}
 
-为了确认攻击通信是否真的在执行期产生边际价值，本文对代表性检查点进行了四种执行期对照：保持训练态的正常模式、将攻击门控强制设为 $g=1$ 的强制开门模式、将攻击门控强制设为 $g=0$ 但保留通信前向计算的强制关门模式，以及完全禁用攻击通信流的无攻击通信模式。正常模式与无攻击通信模式的差值用于衡量通信整体边际收益，强制开门与正常模式的差值用于判断门控是否过于保守，强制关门与无攻击通信模式的差值则用于检查门控关闭后是否仍存在残余影响。结果如表 \ref{tab:comm_isolation} 所示。
+为了确认攻击通信是否真的在执行期产生边际价值，本文对该方案的代表性检查点进行了四种执行期对照：保持训练态的正常模式、将攻击门控强制设为 $g=1$ 的强制开门模式、将攻击门控强制设为 $g=0$ 但保留通信前向计算的强制关门模式，以及完全禁用攻击通信流的无攻击通信模式。正常模式与无攻击通信模式的差值用于衡量通信整体边际收益，强制开门与正常模式的差值用于判断门控是否过于保守，强制关门与无攻击通信模式的差值则用于检查门控关闭后是否仍存在残余影响。结果如表 \ref{tab:comm_isolation} 所示。
 
 \begin{table}[htbp]
     \centering
-    \caption{攻击通信隔离评估结果}
+    \caption{代表性检查点上的攻击通信隔离评估结果}
     \label{tab:comm_isolation}
-    {\renewcommand{\arraystretch}{1.18}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{7pt}
-    \begin{tabularx}{0.94\textwidth}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}p{2.3cm}|}
+    \begin{tabularx}{0.90\textwidth}{|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}p{2.4cm}|}
         \hline
-        Seed & normal & gate\_open & gate\_closed & no\_attack & $\Delta$ (normal $-$ no\_attack) \\
+        正常模式 & 强制开门 & 强制关门 & 禁用攻击通信 & 增益（正常$-$禁用） \\
         \hline
-        Seed 1 & 0.383 & 0.422 & 0.383 & 0.383 & 0.000 \\
-        \hline
-        Seed 2 & 0.750 & 0.766 & 0.750 & 0.750 & 0.000 \\
-        \hline
-        Seed 3 & 0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
+        0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
         \hline
     \end{tabularx}}
 \end{table}
 
-表 \ref{tab:comm_isolation} 给出两个直接结论。其一，攻击通信并非始终无效，Seed 3 上 normal 相对 no\_attack 的 $+4.7\%$ 差值说明通信确实可以在执行期产生额外收益。其二，这一收益并不由“强制把门控拉满”得到，因为 gate\_open 并未系统性优于 normal，反而在部分 seed 上更差。这意味着训练得到的门控并不是简单的“未被打开”，而更像是一种与主干状态相适配的自调节结果。
+表 \ref{tab:comm_isolation} 给出两个直接结论。其一，正常模式相对无攻击通信模式取得了 $+4.7\%$ 的胜率差值，说明攻击通信已经能够在执行期产生可观测的额外收益。其二，这一收益并不由“强制把门控拉满”得到，因为 gate\_open 反而低于 normal。这意味着训练得到的门控并不是简单的“未被打开”，而更像是一种与主干状态相适配的自调节结果。
+四种执行期隔离模式的具体设置及补充统计见附录。
 
 结合该方案代表性检查点的同伴目标与本地目标诊断可以进一步看到，当前方案中的通信不仅能够保持非沉默和稳定门控，还已经能够真实进入攻击通信路径，并在部分状态中形成可测量的动作层影响。因此，这组通信隔离结果与前文训练健康性统计是一致的：本文形成的并不是停留在路由或消息层面的“表面激活”，而是一种已经具备可检验执行期作用的稳定通信介入方案。
 
@@ -303,6 +311,9 @@ C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
     \centering
     \caption{SMAC \texttt{5m\_vs\_6m} 上执行期通信代价的粗粒度对比}
     \label{tab:comm_cost_compare}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{7pt}
     \begin{tabular}{|p{3.9cm}|p{4.2cm}|c|c|c|c|}
         \hline
         方法 & 路由形态 & $p_{\mathrm{comm}}$ & $k$ & $d_{\mathrm{exec}}$ & 执行期通信代价 \\
@@ -313,9 +324,10 @@ C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
         \hline
         本文方案总预算 & 双流合计 & -- & -- & -- & 21.36 \\
         \hline
-        Repo MAIC & 稠密全连接动作偏置 & 1.0000 & 4 & 12 & 48.0 \\
+        MAIC & 稠密全连接动作偏置 & 1.0000 & 4 & 12 & 48.0 \\
         \hline
     \end{tabular}
+    }
 \end{table}
 
 表 \ref{tab:comm_cost_compare} 表明，稳定通信介入方案并不是依赖高带宽广播获得收益。对该方案的代表性检查点而言，攻击流几乎总是参与通信，但消息维度仅为 8 且采用 top-$2$ 选择性路由；移动流则保留较高的按需沉默率。两者相加后的总预算约为 $21.36$，仅相当于 repo MAIC 粗粒度执行期预算 $48.0$ 的
@@ -324,7 +336,7 @@ C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
 \end{equation}
 因此，本文更适合表述为“在较低执行期通信代价下实现了稳定动作层介入”，而不是“依赖大带宽通信换取性能”。
 
-这里也需要说明，这一比较只针对执行期通信载体，并不等同于训练期开销的全面比较。尤其对 MAIC 而言，潜变量维度本身并不能直接代表执行期带宽，更合适的口径是实际注入接收端决策支路的动作偏置维度。本文在这一口径下进行比较，目的并非声称绝对最省，而是说明当前主线确实工作在一个较低通信预算区间内。
+这里也需要说明，这一比较只针对执行期通信载体，并不等同于训练期开销的全面比较。尤其对 MAIC 而言，潜变量维度本身并不能直接代表执行期带宽，更合适的口径是实际注入接收端决策支路的动作偏置维度。本文在这一口径下进行比较，目的并非声称绝对最省，而是说明当前主线确实工作在一个较低通信预算区间内。这一点也与近年从维度分析视角重新审视通信效率的研究结论是一致的，即通信效率不仅取决于“是否发送消息”，也取决于接收端最终承载了多少与决策真正相关的有效维度\cite{sun2025drmac}。若从推理计算结构看，本文额外引入的也主要是低维线性投影、稀疏路由、门控与残差融合，而不是大规模高维广播或深层额外解码网络，因此其额外前向计算复杂度同样保持在较轻水平。这也从带宽之外的另一侧支撑了“轻量通信”这一表述。
 
 进一步地，若将性能轨迹一并纳入比较，则可以更直观地看到稳定通信介入方案与两类典型基线之间的关系。图 \ref{fig:mainline_maic_qmix} 给出了本文两阶段稳定通信介入方案、续跑至约 $2.0$M 步的 MAIC，以及从 $0$ 开始训练至约 $2.0$M 步的 QMIX 在 \texttt{5m\_vs\_6m} 上的测试胜率曲线。其中，红色虚线表示本文方案由无通信主干进入第二阶段轻量通信微调的位置。
 

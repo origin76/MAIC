@@ -37,6 +37,7 @@
 
 \graphicspath{{figures/}}
 \usetikzlibrary{arrows.meta,positioning,fit,calc,backgrounds}
+\usepackage{listings}
 
 \begin{document}
 
@@ -53,7 +54,10 @@
     % 主要符号表，可以没有
     \input{pages/denotation.tex}
 
+    \let\xjtuoldcleardoublepage\cleardoublepage
+    \let\cleardoublepage\clearpage
     \xjtucontent
+    \let\cleardoublepage\xjtuoldcleardoublepage
 
         % 绪论
         \input{pages/intro.tex}

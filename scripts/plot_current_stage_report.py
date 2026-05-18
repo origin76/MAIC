@@ -30,6 +30,22 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+plt.rcParams.update(
+    {
+        "font.sans-serif": [
+            "Noto Sans CJK SC",
+            "Source Han Sans SC",
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Microsoft YaHei",
+            "SimHei",
+            "Arial Unicode MS",
+            "DejaVu Sans",
+        ],
+        "axes.unicode_minus": False,
+    }
+)
+
 
 @dataclass(frozen=True)
 class FileCurveSpec:
@@ -60,19 +76,19 @@ JOIN1_SPECS = [
         family="join1",
     ),
     FileCurveSpec(
-        label="Sparse MAPPO (Budgeted)",
+        label="稀疏 MAPPO（预算约束）",
         path=ROOT
         / "results/join1/budgeted_sparse_mappo/2026-04-02_16-39-47_budgeted_sparse_mappo_join1.json",
         family="join1",
     ),
     FileCurveSpec(
-        label="MAIC Parallel",
+        label="MAIC 并行版",
         path=ROOT
         / "results/join1/maic_parallel_join1_easy_0p5m/2026-05-16_01-21-58_maic_parallel_join1_easy_0p5m_join1.json",
         family="join1",
     ),
     FileCurveSpec(
-        label="MAIC Parallel Tuned",
+        label="MAIC 并行调优版",
         path=ROOT
         / "results/join1/maic_parallel_join1_tuned_join1_easy_0p5m/2026-05-16_01-31-17_maic_parallel_join1_tuned_join1_easy_0p5m_join1.json",
         family="join1",
@@ -82,14 +98,14 @@ JOIN1_SPECS = [
 
 BASELINE_GROUPS = [
     DirGroupSpec(
-        label="Officialish RelaxActor",
+        label="无通信主干",
         directory=ROOT
         / "results/sc2/5m_vs_6m/"
         / "vanilla_mappo_sc2_5m6m_agentwise_centralized_semistable_officialish_1p5m_lrdecay_klstop_relaxactor",
         family="baseline",
     ),
     DirGroupSpec(
-        label="Warm-start Control 300k",
+        label="无通信热启动对照",
         directory=ROOT
         / "results/sc2/5m_vs_6m/"
         / "vanilla_mappo_sc2_5m6m_finetune_control_300k_from_relaxactor1404757",
@@ -216,30 +232,30 @@ FAMILY_COLORS = {
 
 
 FAMILY_DISPLAY_NAMES = {
-    "v1": "Minimal Communication",
-    "v2": "Sharpened-Routing Communication",
-    "v3": "Action-Intention Sharing",
-    "v4": "Attack-Subspace Fusion",
-    "v5": "Attack-Move Dual-Stream Communication",
+    "v1": "最小侵入通信",
+    "v2": "锐化路由通信",
+    "v3": "动作意图共享",
+    "v4": "攻击子空间融合",
+    "v5": "攻移双流通信",
 }
 
 
 CONFIG_DISPLAY_NAMES = {
-    "v1_detach": "Minimal Communication (Detach)",
-    "v1_end2end": "Minimal Communication (End-to-End)",
-    "v2_sharp": "Sharpened Routing Communication",
-    "v2_fastcomm": "Sharpened Routing + FastComm",
-    "v2_sharp_soft": "Soft Sharpened Routing",
-    "v3_detach": "Action Intention Sharing (Detach)",
-    "v3_end2end": "Action Intention Sharing (End-to-End)",
-    "v3_gatefloor": "Action Intention Sharing + Gate Floor",
-    "v3_gain": "Action Intention Sharing + Gain Boost",
-    "v3_fusionboost": "Action Intention Sharing + Fusion Boost",
-    "v4_base": "Attack-Subspace Fusion",
-    "v4_softuse": "Attack-Subspace Fusion (Soft Use)",
-    "v5_base": "Attack-Move Dual-Stream Communication",
-    "v5_top1move": "Dual-Stream + Top-1 Move Routing",
-    "v5_top1move_softplus": "Dual-Stream + Top-1 Move + Softplus",
+    "v1_detach": "最小侵入通信（Detach）",
+    "v1_end2end": "最小侵入通信（端到端）",
+    "v2_sharp": "锐化路由通信",
+    "v2_fastcomm": "锐化路由 + FastComm",
+    "v2_sharp_soft": "软锐化路由",
+    "v3_detach": "动作意图共享（Detach）",
+    "v3_end2end": "动作意图共享（端到端）",
+    "v3_gatefloor": "动作意图共享 + 门控下限",
+    "v3_gain": "动作意图共享 + 增益增强",
+    "v3_fusionboost": "动作意图共享 + 融合增强",
+    "v4_base": "攻击子空间融合",
+    "v4_softuse": "攻击子空间融合（软使用）",
+    "v5_base": "攻移双流通信",
+    "v5_top1move": "双流 + Top-1 移动路由",
+    "v5_top1move_softplus": "双流 + Top-1 移动 + Softplus",
 }
 
 
@@ -258,6 +274,17 @@ plt.rcParams.update(
         "grid.linestyle": "--",
         "font.size": 11,
         "axes.titleweight": "bold",
+        "font.sans-serif": [
+            "Noto Sans CJK SC",
+            "Source Han Sans SC",
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Microsoft YaHei",
+            "SimHei",
+            "Arial Unicode MS",
+            "DejaVu Sans",
+        ],
+        "axes.unicode_minus": False,
     }
 )
 
@@ -365,11 +392,11 @@ def draw_join1_curves(ax: plt.Axes, curves: list[Join1Curve]) -> None:
         x_scaled = curve.x / scale
         ax.plot(x_scaled, curve.y, linewidth=2.4, label=curve.spec.label)
         annotate_curve_endpoint(ax, x_scaled, curve.y, label_offsets.get(idx, 0.0))
-    ax.set_title("Join1 Prototype Environment")
-    ax.set_ylabel("Test win rate")
+    ax.set_title("join1 原型环境")
+    ax.set_ylabel("测试胜率")
     ax.set_ylim(-0.05, 1.05)
     ax.set_xlim(0.0, JOIN1_MAX_T_ENV / scale)
-    ax.legend(frameon=False, ncol=2, title="Method")
+    ax.legend(frameon=False, ncol=2, title="方法")
 
 
 def load_seed(path: Path) -> int | None:
@@ -400,15 +427,15 @@ def mkdir(path: Path) -> None:
 def format_time_axis(ax: plt.Axes, values: Iterable[float]) -> None:
     max_x = max(values) if values else 0.0
     if max_x >= 1_000_000:
-        ax.set_xlabel("t_env (millions)")
+        ax.set_xlabel("环境步数（百万）")
         scale = 1_000_000.0
         ax._codex_scale = scale  # type: ignore[attr-defined]
     elif max_x >= 1_000:
-        ax.set_xlabel("t_env (thousands)")
+        ax.set_xlabel("环境步数（千）")
         scale = 1_000.0
         ax._codex_scale = scale  # type: ignore[attr-defined]
     else:
-        ax.set_xlabel("t_env")
+        ax.set_xlabel("环境步数")
         ax._codex_scale = 1.0  # type: ignore[attr-defined]
 
 
@@ -505,7 +532,7 @@ def plot_baseline(output_dir: Path) -> None:
             x, y = load_scalar_curve(path, "test_battle_won_mean")
             curves.append((x, y))
             all_x.extend(x.tolist())
-            ax.plot(x, y, linewidth=1.8, alpha=0.7, label=f"seed {seed}")
+            ax.plot(x, y, linewidth=1.8, alpha=0.7, label=f"种子 {seed}")
         format_time_axis(ax, all_x)
         for line in ax.lines:
             line.set_xdata(scaled_x(ax, np.asarray(line.get_xdata())))
@@ -517,7 +544,7 @@ def plot_baseline(output_dir: Path) -> None:
             mean_y,
             color="black",
             linewidth=2.6,
-            label="mean",
+            label="平均值",
         )
         ax.fill_between(
             scaled_x(ax, mean_x),
@@ -530,8 +557,8 @@ def plot_baseline(output_dir: Path) -> None:
         ax.set_title(spec.label)
         ax.set_ylim(-0.02, 0.8)
         ax.legend(frameon=False)
-    axes[0].set_ylabel("test_battle_won_mean")
-    fig.suptitle("Vanilla MAPPO Backbone: Officialish vs Warm-start", y=1.02, fontsize=14, fontweight="bold")
+    axes[0].set_ylabel("测试胜率")
+    fig.suptitle("Vanilla MAPPO 主干：无通信主干与无通信热启动对照", y=1.02, fontsize=14, fontweight="bold")
     save_figure(fig, output_dir / "baseline_officialish_vs_warmstart.png")
 
 
@@ -554,7 +581,7 @@ def plot_mappo_backbone(output_dir: Path) -> None:
         x, y = stitch_warmstart_curve(prefix_curve, suffix_curve, BACKBONE_WARMSTART_INIT_STEP)
         curves.append((x, y))
         all_x.extend(x.tolist())
-        ax.plot(x, y, linewidth=1.9, alpha=0.72, label=f"Seed {seed}")
+        ax.plot(x, y, linewidth=1.9, alpha=0.72, label=f"种子 {seed}")
 
     format_time_axis(ax, all_x)
     for line in ax.lines:
@@ -568,7 +595,7 @@ def plot_mappo_backbone(output_dir: Path) -> None:
         mean_y,
         color="black",
         linewidth=2.8,
-        label="Mean",
+        label="平均值",
     )
     ax.fill_between(
         scaled_x(ax, mean_x),
@@ -578,8 +605,8 @@ def plot_mappo_backbone(output_dir: Path) -> None:
         alpha=0.12,
         linewidth=0.0,
     )
-    ax.set_title("No-Communication Warm-Start Control on SMAC 5m_vs_6m")
-    ax.set_ylabel("Test win rate")
+    ax.set_title("SMAC 5m_vs_6m 上的无通信热启动对照轨迹")
+    ax.set_ylabel("测试胜率")
     ax.set_ylim(-0.02, 1.0)
     ax.legend(
         frameon=False,
@@ -652,7 +679,7 @@ def plot_v1_v5_variant_summary(output_dir: Path, agg_rows: list[dict[str, object
     families = [str(row["family"]) for row in agg_rows]
     colors = [FAMILY_COLORS.get(family, "#7f7f7f") for family in families]
     y_pos = np.arange(len(labels))
-    metric_keys = [("peak_mean", "peak_std", "Peak"), ("final_mean", "final_std", "Final"), ("last5_mean", "last5_std", "Last5")]
+    metric_keys = [("peak_mean", "peak_std", "峰值"), ("final_mean", "final_std", "最终值"), ("last5_mean", "last5_std", "末 5 点均值")]
 
     fig, axes = plt.subplots(1, 3, figsize=(19, 9), sharey=True)
     for ax, (mean_key, std_key, title) in zip(axes, metric_keys):
@@ -661,13 +688,13 @@ def plot_v1_v5_variant_summary(output_dir: Path, agg_rows: list[dict[str, object
         ax.barh(y_pos, values, xerr=errors, color=colors, alpha=0.88, error_kw={"elinewidth": 1.0, "capsize": 3})
         ax.set_title(title)
         ax.set_xlim(0.0, 0.8)
-        ax.set_xlabel("test_battle_won_mean")
+        ax.set_xlabel("测试胜率")
         for idx, value in enumerate(values):
             ax.text(min(value + 0.012, 0.79), idx, f"{value:.3f}", va="center", fontsize=9)
     axes[0].set_yticks(y_pos)
     axes[0].set_yticklabels(labels)
     axes[0].invert_yaxis()
-    fig.suptitle("Summary of Five Lightweight Communication Algorithms", y=1.02, fontsize=14, fontweight="bold")
+    fig.suptitle("五类轻量通信算法汇总", y=1.02, fontsize=14, fontweight="bold")
     save_figure(fig, output_dir / "lightweight_comm_algorithm_summary.png")
 
 
@@ -687,9 +714,9 @@ def plot_v1_v5_family_best(output_dir: Path, agg_rows: list[dict[str, object]]) 
     width = 0.24
     fig, ax = plt.subplots(figsize=(13, 5.8))
     metrics = [
-        ("peak_mean", "Peak", -width),
-        ("final_mean", "Final", 0.0),
-        ("last5_mean", "Last5", width),
+        ("peak_mean", "峰值", -width),
+        ("final_mean", "最终值", 0.0),
+        ("last5_mean", "末 5 点均值", width),
     ]
     for key, label, offset in metrics:
         values = np.asarray([float(row[key]) for row in best_rows], dtype=float)
@@ -699,8 +726,8 @@ def plot_v1_v5_family_best(output_dir: Path, agg_rows: list[dict[str, object]]) 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=15, ha="right")
     ax.set_ylim(0.0, 0.82)
-    ax.set_ylabel("test_battle_won_mean")
-    ax.set_title("Best Configuration of Each Communication Algorithm")
+    ax.set_ylabel("测试胜率")
+    ax.set_title("各类通信算法的最佳配置")
     ax.legend(frameon=False)
     save_figure(fig, output_dir / "lightweight_comm_family_best_summary.png")
 
@@ -735,12 +762,12 @@ def plot_representative_curves(output_dir: Path, version_map: dict[str, list[Pat
             x_scaled,
             y,
             linewidth=2.5,
-            label=f"{config_display_name(label)} (seed {seed})",
+            label=f"{config_display_name(label)}（种子 {seed}）",
             color=FAMILY_COLORS.get(family),
         )
         ax.scatter([x_scaled[-1]], [y[-1]], s=26)
-    ax.set_title("Representative Runs of Five Lightweight Communication Algorithms")
-    ax.set_ylabel("test_battle_won_mean")
+    ax.set_title("五类轻量通信算法的代表性运行曲线")
+    ax.set_ylabel("测试胜率")
     ax.set_ylim(0.0, 0.8)
     ax.legend(frameon=False, ncol=2)
     save_figure(fig, output_dir / "lightweight_comm_representative_curves.png")
@@ -748,23 +775,23 @@ def plot_representative_curves(output_dir: Path, version_map: dict[str, list[Pat
 
 def plot_diagnostics(output_dir: Path, version_map: dict[str, list[Path]]) -> None:
     diag_specs = [
-        ("v4_base", "seed 1", select_seed_path(version_map["v4_base"], 1)),
-        ("v5_base", "seed 1", select_seed_path(version_map["v5_base"], 1)),
-        ("v5_top1move", "seed 1", select_seed_path(version_map["v5_top1move"], 1)),
-        ("v5_top1move_softplus", "mean of seeds 1/2/3", None),
+        ("v4_base", "种子 1", select_seed_path(version_map["v4_base"], 1)),
+        ("v5_base", "种子 1", select_seed_path(version_map["v5_base"], 1)),
+        ("v5_top1move", "种子 1", select_seed_path(version_map["v5_top1move"], 1)),
+        ("v5_top1move_softplus", "种子 1/2/3 的平均", None),
     ]
 
     attack_keys = [
-        ("targeted_mean_attn_entropy", "Mean Attention Entropy"),
-        ("targeted_no_comm_prob", "No-Comm Probability"),
-        ("targeted_attack_gate_mean", "Attack Gate Mean"),
-        ("targeted_message_norm", "Message Norm"),
+        ("targeted_mean_attn_entropy", "平均注意力熵"),
+        ("targeted_no_comm_prob", "无通信概率"),
+        ("targeted_attack_gate_mean", "攻击门控均值"),
+        ("targeted_message_norm", "消息范数"),
     ]
     move_keys = [
-        ("targeted_move_mean_attn_entropy", "Move Attention Entropy"),
-        ("targeted_move_no_comm_prob", "Move No-Comm Probability"),
-        ("targeted_move_gate_mean", "Move Gate Mean"),
-        ("targeted_move_message_norm", "Move Message Norm"),
+        ("targeted_move_mean_attn_entropy", "移动注意力熵"),
+        ("targeted_move_no_comm_prob", "移动无通信概率"),
+        ("targeted_move_gate_mean", "移动门控均值"),
+        ("targeted_move_message_norm", "移动消息范数"),
     ]
 
     def get_curves_for_diag(label: str, path: Path | None, key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
@@ -806,24 +833,24 @@ def plot_diagnostics(output_dir: Path, version_map: dict[str, list[Path]]) -> No
                 color = FAMILY_COLORS.get(family, "#7f7f7f")
                 display_label = config_display_name(label)
                 if label == "v5_top1move_softplus":
-                    ax.plot(scaled_x(ax, x), y, linewidth=2.4, color=color, label=f"{display_label} ({legend_suffix})")
+                    ax.plot(scaled_x(ax, x), y, linewidth=2.4, color=color, label=f"{display_label}（{legend_suffix}）")
                     ax.fill_between(scaled_x(ax, x), y - std, y + std, color=color, alpha=0.18, linewidth=0.0)
                 else:
-                    ax.plot(scaled_x(ax, x), y, linewidth=2.0, color=color, label=f"{display_label} ({legend_suffix})")
+                    ax.plot(scaled_x(ax, x), y, linewidth=2.0, color=color, label=f"{display_label}（{legend_suffix}）")
             ax.set_title(subtitle)
-            ax.set_ylabel("value")
+            ax.set_ylabel("数值")
         axes[0].legend(frameon=False, fontsize=9)
         fig.suptitle(title, y=1.01, fontsize=14, fontweight="bold")
         save_figure(fig, output_dir / filename)
 
     draw_grid(
         attack_keys,
-        "Communication Diagnostics: Attack-Side Signals of Attack-Subspace Fusion and Dual-Stream Models",
+        "通信诊断：攻击侧信号（攻击子空间融合与双流模型）",
         "communication_diagnostics_attack.png",
     )
     draw_grid(
         move_keys,
-        "Communication Diagnostics: Move-Side Signals of the Dual-Stream Model",
+        "通信诊断：移动侧信号（双流模型）",
         "communication_diagnostics_move.png",
     )
 

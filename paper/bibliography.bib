@@ -214,3 +214,169 @@
   year = {2016},
   pages = {770-778}
 }
+
+@inproceedings{
+  lo2024learning,
+  title={Learning Multi-Agent Communication with Contrastive Learning},
+  author={Yat Long Lo and Biswa Sengupta and Jakob Nicolaus Foerster and Michael Noukhovitch},
+  booktitle={The Twelfth International Conference on Learning Representations},
+  year={2024},
+  url={https://openreview.net/forum?id=vZZ4hhniJU}
+}
+
+@inproceedings{li2024cacom,
+  author = {Li, Xinran and Zhang, Jun},
+  title = {Context-aware Communication for Multi-agent Reinforcement Learning},
+  year = {2024},
+  isbn = {9798400704864},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {Effective communication protocols in multi-agent reinforcement learning (MARL) are critical to fostering cooperation and enhancing team performance. To leverage communication, many previous works have proposed to compress local information into a single message and broadcast it to all reachable agents. This simplistic messaging mechanism, however, may fail to provide adequate, critical, and relevant information to individual agents, especially in severely bandwidth-limited scenarios. This motivates us to develop context-aware communication schemes for MARL, aiming to deliver personalized messages to different agents. Our communication protocol, named CACOM, consists of two stages. In the first stage, agents exchange coarse representations in a broadcast fashion, providing context for the second stage. Following this, agents utilize attention mechanisms in the second stage to selectively generate messages personalized for the receivers. Furthermore, we employ the learned step size quantization (LSQ) technique for message quantization to reduce the communication overhead. To evaluate the effectiveness of CACOM, we integrate it with both actor-critic and value-based MARL algorithms. Empirical results on cooperative benchmark tasks demonstrate that CACOM provides evident performance gains over baselines under communication-constrained scenarios. The code is publicly available at https://github.com/LXXXXR/CACOM.},
+  booktitle = {Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {1156–1164},
+  numpages = {9},
+  keywords = {communication, multi-agent systems, reinforcement learning},
+  location = {Auckland, New Zealand},
+  series = {AAMAS '24}
+}
+
+@inproceedings{pina2024independentcomm,
+  author = {Pina, Rafael and De Silva, Varuna and Artaud, Corentin and Liu, Xiaolan},
+  title = {Fully Independent Communication in Multi-Agent Reinforcement Learning},
+  year = {2024},
+  isbn = {9798400704864},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {Several recent works have focused on communication approaches in Multi-Agent Reinforcement Learning (MARL). However, the multiple proposed communication methods might still be too complex and not easily transferable to more practical contexts. One of the reasons is due to the use of the famous parameter sharing trick. In this paper, we investigate how independent learners in MARL that do not share parameters can communicate. We demonstrate that this setting might incur into some problems, to which we propose a new learning scheme as a solution. Our results show that, despite the challenges, independent agents can still learn communication strategies following our method. Additionally, we use this method to investigate how communication in MARL is affected by different network capacities, both for sharing and not sharing parameters.},
+  booktitle = {Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {2423–2425},
+  numpages = {3},
+  keywords = {communication, deep learning, independent learning, multi-agent reinforcement learning},
+  location = {Auckland, New Zealand},
+  series = {AAMAS '24}
+}
+
+@inproceedings{sun2025drmac,
+  author = {Sun, Chuxiong and He, Peng and Wang, Rui and Zheng, Changwen},
+  title = {Revisiting Communication Efficiency in Multi-Agent Reinforcement Learning from the Dimensional Analysis Perspective},
+  year = {2025},
+  isbn = {9798400714269},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {In this work, we introduce a novel perspective-dimensional analysis-to address the challenge of communication efficiency in Multi-Agent Reinforcement Learning (MARL). Our findings reveal that simply optimizing the content and timing of communication at sending end is insufficient to fully resolve communication efficiency issues. Even after applying optimized and gated messages, dimensional redundancy and confounders still persist in the integrated message embeddings at receiving end, which negatively impact communication quality and decision-making. To address these challenges, we propose Dimensional Rational Multi-Agent Communication (DRMAC), designed to mitigate both dimensional redundancy and confounders in MARL. DRMAC incorporates a redundancy-reduction regularization term to encourage the decoupling of information across dimensions within the learned representations of integrated messages. Additionally, we introduce a dimensional mask that dynamically adjusts gradient weights during training to eliminate the influence of decision-irrelevant dimensions. We evaluate DRMAC across a diverse set of multi-agent tasks, demonstrating its superior performance over existing state-of-the-art methods in complex scenarios. Furthermore, the plug-and-play nature of DRMAC's key modules highlights its generalizable performance, serving as a valuable complement rather than a replacement for existing multi-agent communication strategies.},
+  booktitle = {Proceedings of the 24th International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {1977–1986},
+  numpages = {10},
+  keywords = {cooperative multi-agent systems, multi-agent communication, multi-agent reinforcement learning},
+  location = {Detroit, MI, USA},
+  series = {AAMAS '25}
+}
+
+@inproceedings{dolan2025asyncomarl,
+  author = {Dolan, Sydney and Nayak, Siddharth and Aloor, Jasmine Jerry and Balakrishnan, Hamsa},
+  title = {Asynchronous Cooperative Multi-Agent Reinforcement Learning with Limited Communication},
+  year = {2025},
+  isbn = {9798400714269},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {We consider the problem setting in which multiple autonomous agents must cooperatively navigate and perform tasks in an unknown, communication-constrained environment. Traditional multi-agent reinforcement learning (MARL) approaches assume synchronous communications and perform poorly in such environments. We propose AsynCoMARL, an asynchronous MARL approach that uses graph transformers to learn communication protocols from dynamic graphs. AsynCoMARL can accommodate infrequent and asynchronous communications between agents, with edges of the graph only forming when agents communicate with each other. We show that AsynCoMARL achieves similar success and collision rates as leading baselines, despite 26\% fewer messages being passed between agents.},
+  booktitle = {Proceedings of the 24th International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {2496–2498},
+  numpages = {3},
+  keywords = {multi-agent reinforcement learning, satellite navigation},
+  location = {Detroit, MI, USA},
+  series = {AAMAS '25}
+}
+
+@inproceedings{li2024languagegroundedmarl,
+  author = {Li, Huao and Mahjoub, Hossein Nourkhiz and Chalaki, Behdad and Tadiparthi, Vaishnav and Lee, Kwonjoon and Moradi-Pari, Ehsan and Lewis, Michael and Sycara, Katia},
+  title = {Language grounded multi-agent reinforcement learning with human-interpretable communication},
+  year = {2024},
+  isbn = {9798331314385},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {Multi-Agent Reinforcement Learning (MARL) methods have shown promise in enabling agents to learn a shared communication protocol from scratch and accomplish challenging team tasks. However, the learned language is usually not interpretable to humans or other agents not co-trained together, limiting its applicability in ad-hoc teamwork scenarios. In this work, we propose a novel computational pipeline that aligns the communication space between MARL agents with an embedding space of human natural language by grounding agent communications on synthetic data generated by embodied Large Language Models (LLMs) in interactive teamwork scenarios. Our results demonstrate that introducing language grounding not only maintains task performance but also accelerates the emergence of communication. Furthermore, the learned communication protocols exhibit zero-shot generalization capabilities in ad-hoc teamwork scenarios with unseen teammates and novel task states. This work presents a significant step toward enabling effective communication and collaboration between artificial agents and humans in real-world teamwork settings.},
+  booktitle = {Proceedings of the 38th International Conference on Neural Information Processing Systems},
+  articleno = {2790},
+  numpages = {26},
+  location = {Vancouver, BC, Canada},
+  series = {NIPS '24}
+}
+
+@inproceedings{ding2024seqcomm,
+  author = {Ding, Ziluo and Liu, Zeyuan and Fang, Zhirui and Su, Kefan and Zhu, Liwen and Lu, Zongqing},
+  title = {Multi-agent coordination via multi-level communication},
+  year = {2024},
+  isbn = {9798331314385},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {The partial observability and stochasticity in multi-agent settings can be mitigated by accessing more information about others via communication. However, the coordination problem still exists since agents cannot communicate actual actions with each other at the same time due to the circular dependencies. In this paper, we propose a novel multi-level communication scheme, Sequential Communication (SeqComm). SeqComm treats agents asynchronously (the upper-level agents make decisions before the lower-level ones) and has two communication phases. In the negotiation phase, agents determine the priority of decision-making by communicating hidden states of observations and comparing the value of intention, obtained by modeling the environment dynamics. In the launching phase, the upper-level agents take the lead in making decisions and then communicate their actions with the lower-level agents. Theoretically, we prove the policies learned by SeqComm are guaranteed to improve monotonically and converge. Empirically, we show that SeqComm outperforms existing methods in various cooperative multi-agent tasks.},
+  booktitle = {Proceedings of the 38th International Conference on Neural Information Processing Systems},
+  articleno = {3763},
+  numpages = {27},
+  location = {Vancouver, BC, Canada},
+  series = {NIPS '24}
+}
+
+@inproceedings{sheng2023lsc,
+  author = {Sheng, Junjie and Wang, Xiangfeng and Jin, Bo and Li, Wenhao and Wang, Jun and Yan, Junchi and Chang, Tsung-Hui and Zha, Hongyuan},
+  title = {Learning Structured Communication for Multi-Agent Reinforcement Learning},
+  year = {2023},
+  isbn = {9781450394321},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {This paper investigates multi-agent reinforcement learning (MARL) communication mechanisms in large-scale scenarios. We propose a novel framework, Learning Structured Communication (LSC), that leverages a flexible and efficient communication topology. LSC enables adaptive agent grouping to create diverse hierarchical formations over episodes generated through an auxiliary task and a hierarchical routing protocol. We learn a hierarchical graph neural network with the formed topology that facilitates effective message generation and propagation between inter- and intra-group communications. Unlike state-of-the-art communication mechanisms, LSC possesses a detailed and learnable design for hierarchical communication. Numerical experiments on challenging tasks demonstrate that the proposed LSC exhibits high communication efficiency and global cooperation capability.},
+  booktitle = {Proceedings of the 2023 International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {436–438},
+  numpages = {3},
+  keywords = {graph neural networks, hierarchical structure, learning to communicate, multi-agent reinforcement learning},
+  location = {London, United Kingdom},
+  series = {AAMAS '23}
+}
+
+@inproceedings{han2023mbc,
+  author = {Han, Shuai and Dastani, Mehdi and Wang, Shihan},
+  title = {Model-based Sparse Communication in Multi-agent Reinforcement Learning},
+  year = {2023},
+  isbn = {9781450394321},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {Learning to communicate efficiently is central to multi-agent reinforcement learning (MARL). Existing methods often require agents to exchange messages intensively, which abuses communication channels and leads to high communication overhead. Only a few methods target on learning sparse communication, but they allow limited information to be shared, which affects the efficiency of policy learning. In this work, we propose model-based communication (MBC), a learning framework with a decentralized communication scheduling process. The MBC framework enables multiple agents to make decisions with sparse communication. In particular, the MBC framework introduces a model-based message estimator to estimate the up-to-date global messages using past local data. A decentralized message scheduling mechanism is also proposed to determine whether a message shall be sent based on the estimation. We evaluated our method in a variety of mixed cooperative-competitive environments. The experiment results show that the MBC method shows better performance and lower channel overhead than the state-of-art baselines.},
+  booktitle = {Proceedings of the 2023 International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {439–447},
+  numpages = {9},
+  keywords = {communication learning, message scheduling, multi-agent reinforcement learning, multi-agent system},
+  location = {London, United Kingdom},
+  series = {AAMAS '23}
+}
+
+@inproceedings{zhang2025decisionintention,
+  author = {Zhang, Zeren and Xu, Zhiwei and Zhou, Guangchong and Li, Dapeng and Zhang, Bin and Fan, Guoliang},
+  title = {Unveiling Decision Intention for Cooperative Multi-Agent Reinforcement Learning},
+  year = {2025},
+  isbn = {9798400714269},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address = {Richland, SC},
+  abstract = {For cooperative multi-agent reinforcement learning, various methods have been proposed to enhance the collaborative strategy capabilities of agents. However, when agents make decisions, humans have no knowledge of their subsequent decision-making intentions or sub-goals. This lack of understanding hinders human comprehension of agent strategies and further research on agents. Currently, there are limited relevant studies. To address this problem, we propose a novel framework which can generate the decision intention of agents. We first formalize this problem and use states crucial to the task to express the decision intentions of agents. Then, we introduce the polarization index to measure the importance of states and select them for training. Finally, we learn the decision intentions through a diffusion model with rapid generation capability and generate them during the decision-making process. This study sheds light on the problem of agent decision intention and enhances the transparency of agent strategies, facilitating deeper research on agents. The experimental results demonstrate the effectiveness of our approach.},
+  booktitle = {Proceedings of the 24th International Conference on Autonomous Agents and Multiagent Systems},
+  pages = {2345–2354},
+  numpages = {10},
+  keywords = {decision intention, diffusion model, multi-agent reinforcement learning},
+  location = {Detroit, MI, USA},
+  series = {AAMAS '25}
+}
+
+@inproceedings{liu2024iagents,
+  author = {Liu, Wei and Wang, Chenxi and Wang, Yifei and Xie, Zihao and Qiu, Rennai and Dang, Yufan and Du, Zhuoyun and Chen, Weize and Yang, Cheng and Qian, Chen},
+  title = {Autonomous agents for collaborative task under information asymmetry},
+  year = {2024},
+  isbn = {9798331314385},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {Large Language Model Multi-Agent Systems (LLM-MAS) have greatly progressed in solving complex tasks. It communicates among agents within the system to collaboratively solve tasks, under the premise of shared information. However, when agents' collaborations are leveraged to perform multi-person tasks, a new challenge arises due to information asymmetry, since each agent can only access the information of its human user. Previous MAS struggle to complete tasks under this condition. To address this, we propose a new MAS paradigm termed iAgents, which denotes Informative Multi-Agent Systems. In iAgents, the human social network is mirrored in the agent network, where agents proactively exchange human information necessary for task resolution, thereby overcoming information asymmetry. iAgents employs a novel agent reasoning mechanism, InfoNav, to navigate agents' communication towards effective information exchange. Together with InfoNav, iAgents organizes human information in a mixed memory to provide agents with accurate and comprehensive information for exchange. Additionally, we introduce InformativeBench, the first benchmark tailored for evaluating LLM agents' task-solving ability under information asymmetry. Experimental results show that iAgents can collaborate within a social network of 140 individuals and 588 relationships, autonomously communicate over 30 turns, and retrieve information from nearly 70,000 messages to complete tasks within 3 minutes. https://github.com/thinkwee/iAgents.},
+  booktitle = {Proceedings of the 38th International Conference on Neural Information Processing Systems},
+  articleno = {90},
+  numpages = {32},
+  location = {Vancouver, BC, Canada},
+  series = {NIPS '24}
+}

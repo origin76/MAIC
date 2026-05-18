@@ -164,17 +164,17 @@ def plot_panel(ax: plt.Axes, spec: PanelSpec) -> None:
     comm_x_plot, comm_y_plot = prepend_anchor(comm_x, comm_y_smooth, anchor_x, anchor_y)
     no_comm_x_plot, no_comm_y_plot = prepend_anchor(no_comm_x, no_comm_y_smooth, anchor_x, anchor_y)
 
-    ax.plot(prefix_x / 1e6, prefix_y_smooth, color="#888888", linewidth=2.3, label="Backbone trajectory")
-    ax.plot(comm_x_plot / 1e6, comm_y_plot, color="#e45756", linewidth=2.2, label="Communication branch")
-    ax.plot(no_comm_x_plot / 1e6, no_comm_y_plot, color="#4c78a8", linewidth=2.2, label="Backbone branch")
+    ax.plot(prefix_x / 1e6, prefix_y_smooth, color="#888888", linewidth=2.3, label="共同主干轨迹")
+    ax.plot(comm_x_plot / 1e6, comm_y_plot, color="#e45756", linewidth=2.2, label="通信续跑")
+    ax.plot(no_comm_x_plot / 1e6, no_comm_y_plot, color="#4c78a8", linewidth=2.2, label="无通信续跑")
 
     ax.scatter([branch_x], [anchor_y], color="#222222", s=22, zorder=5)
     ax.axvline(branch_x, color="#222222", linestyle="--", linewidth=1.1, alpha=0.7)
-    ax.text(branch_x, ax.get_ylim()[1] * 0.98, "branch", fontsize=8.5, ha="center", va="top", color="#222222")
+    ax.text(branch_x, ax.get_ylim()[1] * 0.98, "分叉点", fontsize=8.5, ha="center", va="top", color="#222222")
 
     ax.set_title(spec.title, fontsize=12, fontweight="bold")
-    ax.set_ylabel("Test win rate")
-    ax.set_xlabel("Env steps (M)")
+    ax.set_ylabel("测试胜率")
+    ax.set_xlabel("环境步数（百万）")
     ax.grid(True, linestyle="--", alpha=0.25)
     ax.set_ylim(bottom=0.0)
 
@@ -193,6 +193,17 @@ def main() -> None:
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
             "font.size": 11,
+            "font.sans-serif": [
+                "Noto Sans CJK SC",
+                "Source Han Sans SC",
+                "PingFang SC",
+                "Hiragino Sans GB",
+                "Microsoft YaHei",
+                "SimHei",
+                "Arial Unicode MS",
+                "DejaVu Sans",
+            ],
+            "axes.unicode_minus": False,
         }
     )
 
@@ -204,7 +215,7 @@ def main() -> None:
     handles, labels = axes[1].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
     fig.suptitle(
-        "Cross-map equal-budget comparison: backbone trajectory and post-branch continuations",
+        "跨地图等预算分叉对照：共同主干轨迹与后续续跑结果",
         fontsize=13,
         fontweight="bold",
         y=0.98,

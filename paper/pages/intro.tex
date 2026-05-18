@@ -41,6 +41,7 @@
 已成为主流范式，相关代表方法包括 MADDPG、COMA、QMIX 和 MAPPO 等\cite{lowe2017maddpg,foerster2018coma,rashid2018qmix,yu2021mappo}。
 然而，CTDE 并没有消除执行期智能体之间的信息缺口，
 因此显式通信仍是协作型 MARL 的关键问题，相关研究已经从 CommNet、DIAL 一类早期可微通信框架发展到 TarMAC、ATOC 等更具选择性的注意力通信方法\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional}。
+近年来，研究者又进一步从对比式消息表征、上下文感知通信、稀疏调度、维度效率和可解释通信等角度推进这一方向，说明显式通信研究已经从“能否通信”逐步转向“如何在低成本条件下高质量通信”\cite{lo2024learning,li2024cacom,han2023mbc,sun2025drmac,li2024languagegroundedmarl}。
 尽管如此，如何在保证低带宽代价的前提下，使通信特征稳定、无损地介入局部决策并促成战术共识，仍是协作型 MARL 面临的核心难题。
 
 \section{国内外研究现状}
@@ -51,6 +52,8 @@
 核心目标是缓解多智能体训练中的非平稳性与信用分配问题\cite{tan1993iql,sunehag2018vdn,rashid2018qmix,lowe2017maddpg,foerster2018coma,yu2021mappo}。
 第二条路线直接面向执行期信息不足，通过显式通信来补充局部观测之外的状态信息、行为意图或激励信号，
 代表工作包括 CommNet、DIAL、TarMAC、ATOC、IC3Net 和 MAIC\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional,singh2018ic3net,yuan2022maic}。
+近年的研究进一步表明，通信设计的关注点已经扩展到结构化拓扑、上下文感知消息、人类可解释语义以及有限通信条件下的异步协作\cite{sheng2023lsc,li2024cacom,li2024languagegroundedmarl,dolan2025asyncomarl}。
+与此同时，大模型时代的多智能体协作也开始把信息不对称、长程协商和显式信息交换重新带回研究中心，说明“协作中如何交换正确的信息”正在成为更广义多智能体系统的共同问题\cite{liu2024iagents}。
 
 总体上，相关研究已经从广播式通信发展到注意力路由、门控稀疏通信和队友建模，
 但仍存在两个突出问题：

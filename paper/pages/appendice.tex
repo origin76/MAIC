@@ -28,17 +28,533 @@
 \xjtuappendixchapter{补充实验材料}
 \xjtuappendixechapter{Supplementary Experimental Materials}
 
-\xjtuappendixsection{实验结果文件说明}
+\setcounter{section}{0}
+\setcounter{subsection}{0}
+\titleformat{\section}[hang]{\xiaosan}{}{0em}{\thesection\quad}[]
+\titlespacing*{\section}{0em}{1.0\baselineskip}{0.6\baselineskip}
+\titleformat{\subsection}{\sihao}{}{0em}{\thesubsection\quad}[]
+\titlespacing*{\subsection}{0em}{0.9\baselineskip}{0.5\baselineskip}
 
-本文实验中使用的主要结果文件包括：
+\xjtuappendixsection{补充训练配置与关键超参数}
+
+本附录首先给出正文代表性主线所对应的训练配置与关键超参数。
+这里不再重复列出实现中的全部默认项，
+而是仅保留对两阶段训练、轻量通信结构以及稳定通信介入方案最关键的设置。
+
+\xjtuappendixsubsection{主干训练与两阶段热启动设置}
+
+\begin{table}[htbp]
+    \centering
+    \caption{代表性主线的基础训练配置}
+    \label{tab:appendix_train_config}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
+        \hline
+        参数 & 取值 & 作用说明 \\
+        \hline
+        主干算法 & MAPPO & 采用共享参数 Actor 与集中式 Critic 的 CTDE 训练框架 \\
+        \hline
+        每步并行环境数 & 4 & 每次并行环境交互的环境数 \\
+        \hline
+        PPO 小批量规模 & 8 & PPO 更新时的小批量规模 \\
+        \hline
+        隐藏状态维度 & 64 & 局部循环策略网络隐藏状态维度 \\
+        \hline
+        PPO 更新轮数 & 6 & 每轮采样后的 PPO 更新轮数 \\
+        \hline
+        PPO 截断系数 & 0.2 & PPO 截断系数 \\
+        \hline
+        策略熵系数 & 0.02 & 策略熵正则系数 \\
+        \hline
+        Actor / Critic 学习率 & $1\times10^{-4}$ / $3\times10^{-4}$ & Actor 与 Critic 学习率 \\
+        \hline
+        梯度裁剪上界 & 5 & 防止热启动阶段梯度过大 \\
+        \hline
+        第二阶段训练步数 & 500000 & 热启动后的通信微调时长 \\
+        \hline
+        热启动步数 & 1404757 & 从稳定无通信主干检查点开始微调 \\
+        \hline
+        继承策略 / 价值函数 & True / True & 第二阶段同时继承主干策略与价值函数 \\
+        \hline
+        继承价值归一化 & True & 继承价值归一化统计，降低热启动漂移 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+\xjtuappendixsubsection{稳定通信介入方案的关键通信超参数}
+
+\begin{table}[htbp]
+    \centering
+    \caption{代表性主线的关键通信超参数}
+    \label{tab:appendix_comm_hyper}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\raggedright\arraybackslash}p{4.8cm}|>{\centering\arraybackslash}p{1.9cm}|X|}
+        \hline
+        参数 & 取值 & 作用说明 \\
+        \hline
+        通信注意力维度 & 16 & query/key 投影维度 \\
+        \hline
+        攻击 / 移动消息维度 & 8 / 8 & 攻击流与移动流的单边消息维度 \\
+        \hline
+        攻击 / 移动保留邻居数 & 2 / 2 & 两条通信流每步最多保留的接收者数量 \\
+        \hline
+        显式禁止通信选项 & True & 用于按需沉默 \\
+        \hline
+        攻击残差基础增益 & 0.5 & 攻击残差注入动作层的基础增益 \\
+        \hline
+        攻击门控上界 & 0.6 & 限制最大介入力度 \\
+        \hline
+        攻击沉默预算惩罚 & 0.3 & 抑制无通信逃逸 \\
+        \hline
+        攻击目标沉默比例 & 0.30 & 攻击流允许的目标沉默比例 \\
+        \hline
+        攻击目标熵 & 0.50 & 攻击注意力的目标选择性熵 \\
+        \hline
+        攻击熵损失权重 & 0.005 & 攻击熵目标损失权重 \\
+        \hline
+        融合路径冲突边际损失权重 & 0.005 & 最终融合路径上的同伴冲突边际损失权重 \\
+        \hline
+        攻击路径冲突边际损失权重 & 0.02 & 仅攻击通信路径上的同伴冲突边际损失权重 \\
+        \hline
+        同伴冲突目标边际 & 0.03 & 同伴目标相对本地目标的目标边际 \\
+        \hline
+        边际 Huber 平滑参数 & 0.02 & 边际损失中的 Huber 平滑参数 \\
+        \hline
+        同伴置信度阈值 & 0.70 & 仅在同伴意图足够置信时施加冲突修正 \\
+        \hline
+        本地置信度截断上界 & 0.90 & 不确定性感知暴露中的本地置信度上界 \\
+        \hline
+        最小不确定性权重 & 0.40 & 最终融合路径上保留的最小不确定性权重 \\
+        \hline
+        移动残差基础增益 & 0.05 & 移动流采用更弱残差，以避免高熵扩散 \\
+        \hline
+        移动目标沉默比例 & 0.65 & 移动流保持较高按需沉默比例 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+从功能划分上看，
+上述超参数主要服务于四个目标：
+其一，通过 \texttt{top-}2 路由和低维消息限制执行期通信预算；
+其二，通过沉默预算与熵目标抑制攻击流的平均化与沉默逃逸；
+其三，通过同伴冲突边际损失把通信压力集中到更具协同价值的冲突状态；
+其四，通过不确定性感知暴露避免在本地策略高置信状态上进行全局性强干预。
+
+\xjtuappendixsection{通信隔离评估与 peer-local 因果诊断细表}
+
+本节对正文中的两类机制性评估进行补充展开。
+第一类是执行期通信隔离评估，
+用于判断攻击通信在保持其余网络不变时是否具有可观测边际收益；
+第二类是 \textit{peer-local} 因果诊断，
+用于分析通信在“同伴目标与本地目标冲突”的状态中是否真正改变了最终攻击决策。
+
+\xjtuappendixsubsection{四种执行期隔离模式说明}
+
+正文中的隔离评估使用四种执行期模式：
 \begin{enumerate}
-    \item \texttt{results/sacred} 下的训练日志；
-    \item \texttt{results/sc2} 与 \texttt{results/join1} 下导出的 TensorBoard 标量 JSON；
-    \item \texttt{figures/current\_stage\_report\_2026\_04\_15} 目录下的汇总图表。
+    \item 正常模式：保持训练得到的攻击通信门控与前向路径不变；
+    \item 强制开门模式：将攻击门控固定为 $g=1$；
+    \item 强制关门模式：将攻击门控固定为 $g=0$，但保留通信前向计算；
+    \item 禁用攻击通信模式：完全去除攻击通信分支。
 \end{enumerate}
 
-正文中的主要图像由脚本 \texttt{scripts/plot\_current\_stage\_report.py} 自动生成。
+其中，正常模式与禁用攻击通信模式之间的差值用于衡量攻击通信的整体边际收益；
+强制开门模式与正常模式的差值用于判断学习到的门控是否过于保守；
+强制关门模式与禁用攻击通信模式的差值则用于检查门控关闭后是否仍存在残余影响。
 
-\xjtuappendixsection{当前版本的未完成部分}
+\begin{table}[htbp]
+    \centering
+    \caption{代表性增益检查点上的攻击通信隔离评估细表}
+    \label{tab:appendix_isolation_detail}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{7pt}
+    \begin{tabular}{|c|c|c|c|c|}
+        \hline
+        正常模式 & 强制开门 & 强制关门 & 禁用攻击通信 & 增益（正常$-$禁用） \\
+        \hline
+        0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
+        \hline
+    \end{tabular}}
+\end{table}
 
-受时间与篇幅限制，当前论文草稿中尚未完全补齐的内容主要包括：完整超参数表、硬件配置说明、更多种子实验的系统统计、以及最终定稿所需的正式致谢和个人元信息。这些内容不影响当前阶段对算法结构与实验结论的整理，但仍需在最终提交前补全。
+表 \ref{tab:appendix_isolation_detail} 对应正文中的代表性隔离增益结果。
+从中可以看到，
+攻击通信的边际收益并不是通过将门控强行拉满获得的，
+而是来自训练后形成的中等门控工作区间。
+这一点与正文中“通信已进入动作层，但并非依赖硬饱和工作”的结论相一致。
+
+\xjtuappendixsubsection{早期低介入基线的因果诊断细表}
+
+为了说明本文修正主线所针对的具体瓶颈，
+表 \ref{tab:appendix_signsplit_diag} 给出早期 \textit{sign-split} 基线在三 seed 上的
+\textit{peer-local} 因果诊断均值。
+这一配置已经基本压住了沉默逃逸，
+但通信残差仍几乎无法跨过本地攻击边界。
+
+\begin{table}[htbp]
+    \centering
+    \caption{早期低介入基线的 \textit{peer-local} 因果诊断均值}
+    \label{tab:appendix_signsplit_diag}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{4.0cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
+        \hline
+        指标 & 均值 & 含义说明 \\
+        \hline
+        冲突状态占比 & 0.1130 & 同伴 top-1 目标与本地 top-1 目标不一致的有效攻击状态比例 \\
+        \hline
+        同伴 top-1 置信度 & 0.9253 & 同伴聚合意图在冲突状态中的平均置信度 \\
+        \hline
+        本地 top-1 置信度 & 0.9110 & 本地策略在对应状态中的平均置信度 \\
+        \hline
+        无通信概率 & 0.0019 & 沉默逃逸已基本被压制 \\
+        \hline
+        攻击门控均值 & 0.0728 & 通信门控仍处于明显偏低区间 \\
+        \hline
+        残差平均绝对值 & 0.0824 & 未乘门控前的攻击残差幅度 \\
+        \hline
+        有效残差平均绝对值 & 0.0006 & 门控后真正进入动作层的有效残差几乎为零 \\
+        \hline
+        仅攻击路径跟随同伴比例 & 0.0023 & 即使去掉最终融合抑制，仅攻击通信路径也几乎不跟随同伴目标 \\
+        \hline
+        最终融合跟随同伴比例 & 0.0000 & 融合策略几乎从不跨过本地 top-1 边界 \\
+        \hline
+        最终融合保持本地比例 & 1.0000 & 冲突状态中最终决策完全由本地策略主导 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+表 \ref{tab:appendix_signsplit_diag} 说明，
+早期阶段的主要问题并不是同伴意图不存在，
+也不是通信分支通过“无通信”标记逃逸，
+而是门控后的有效残差过小，
+导致最终动作目标几乎从不发生改变。
+这也解释了为何后续改进必须转向“通信到动作层介入”而不是继续围绕样本对齐策略微调。
+
+\xjtuappendixsubsection{稳定通信介入方案的末段因果诊断统计}
+
+表 \ref{tab:appendix_v5b_diag} 汇总了稳定通信介入方案在三 seed 末段的关键因果诊断统计。
+与表 \ref{tab:appendix_signsplit_diag} 相比，
+这一结果反映的已不再是“通信无法进入动作层”，
+而是“通信已稳定进入动作层，但仍较少跨越本地决策边界”的新瓶颈。
+
+\begin{table}[htbp]
+    \centering
+    \caption{稳定通信介入方案的末段因果诊断统计（3 seed 均值）}
+    \label{tab:appendix_v5b_diag}
+    {\renewcommand{\arraystretch}{1.28}
+    \setlength{\extrarowheight}{1pt}
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{4.0cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
+        \hline
+        指标 & 均值 & 含义说明 \\
+        \hline
+        攻击门控末段均值 & 0.5141 & 攻击通信保持在中等偏开的健康区间 \\
+        \hline
+        攻击无通信概率末段均值 & 0.0083 & 攻击流没有重新退回沉默 \\
+        \hline
+        攻击注意力熵末段均值 & 0.4428 & 路由保持选择性，未塌缩也未退化为平均分配 \\
+        \hline
+        有效残差末段均值 & 0.0916 & 通信残差已稳定进入攻击动作层 \\
+        \hline
+        冲突状态占比末段均值 & 0.1326 & 训练后段仍存在非零同伴冲突状态 \\
+        \hline
+        同伴 top-1 跟随率（仅攻击路径） & 0.0275 & 仅攻击通信路径能够有限地朝同伴目标移动 \\
+        \hline
+        同伴 top-1 跟随率（最终融合） & 0.0141 & 最终融合后的跟随率仍明显偏低 \\
+        \hline
+        保持本地目标比例（最终融合） & 0.9854 & 最终动作仍以本地策略为主导 \\
+        \hline
+        加权本地置信度末段均值 & 0.8401 & 不确定性感知暴露更偏向本地较不确定的样本 \\
+        \hline
+        原始本地置信度末段均值 & 0.9120 & 与上一项的差值反映了状态条件化筛选确实生效 \\
+        \hline
+    \end{tabularx}}
+\end{table}
+
+表 \ref{tab:appendix_v5b_diag} 对应了正文中“稳定通信介入方案”的机制边界。
+该结果已经能够同时满足非沉默、健康门控、非零有效残差与较高任务性能，
+说明通信进入动作层的暴露瓶颈已被修复；
+但最终融合策略保持本地目标的比例仍接近 1，
+表明“因果性决策改变”问题尚未彻底解决。
+
+\xjtuappendixsection{关键辅助损失与诊断指标的完整定义}
+
+正文中为了保持方法叙事的紧凑性，
+只保留了最关键的机制公式。
+本节对若干辅助损失与诊断指标给出更完整的定义，
+以便与附录前两节中的统计量对应。
+
+\xjtuappendixsubsection{意图对齐损失与有效样本掩码}
+
+设 \(\hat{q}_i^t\) 为由真实通信权重聚合、并结合可执行攻击掩码得到的同伴攻击意图分布，
+\(\pi_{i,\text{fused}}^{\text{att},t}\) 为融合通信后的攻击分布。
+记
+\begin{equation}
+M_{i,\text{align}}^t
+=
+\mathbb{I}_{\text{can-attack}}^t
+\cdot
+\mathbb{I}_{\text{peer-valid}}^t
+\cdot
+\mathbb{I}_{\text{real-mass-ok}}^t ,
+\end{equation}
+其中三项分别表示当前样本可攻击、同伴意图置信度有效、以及真实通信质量满足要求。
+则意图对齐损失可写为
+\begin{equation}
+L_{\text{align}}
+=
+\lambda_{\text{align}}
+\frac{
+\sum_{t,i}
+M_{i,\text{align}}^t
+D_{\mathrm{KL}}
+\left(
+\operatorname{sg}[\hat{q}_i^t]
+\middle\|
+\pi_{i,\text{fused}}^{\text{att},t}
+\right)
+}{
+\sum_{t,i} M_{i,\text{align}}^t + \epsilon
+}.
+\end{equation}
+这里的停止梯度操作 \(\operatorname{sg}[\cdot]\) 用于固定同伴目标分布，
+从而把优化重点保持在“接收端是否正确利用通信建议”上。
+
+\xjtuappendixsubsection{优势引导动作层介入损失}
+
+设攻击通信融合策略与局部策略在已执行攻击动作 \(a_i^t\) 上的对数概率差为
+\begin{equation}
+d_i^t
+=
+\log \pi_{\text{att-fused}}(a_i^t)
+-
+\operatorname{sg}\!\left[
+\log \pi_{\text{local}}(a_i^t)
+\right].
+\end{equation}
+记 \(\hat{A}_i^t\) 为归一化优势估计，
+\(\rho_i^t\) 为攻击通信路由到真实队友的质量权重，
+\(M_{i,\text{adv}}^t\) 为有效攻击样本掩码，
+则优势引导的基础动作层介入损失可写为
+\begin{equation}
+L_{\text{adv-lev}}
+=
+\eta
+\frac{
+\sum_{t,i}
+M_{i,\text{adv}}^t
+\rho_i^t
+\operatorname{clip}\!\left((\hat{A}_i^t)_+,0,A_{\max}\right)
+\left[
+\max(0,\mu-d_i^t)
+\right]^2
+}{
+\sum_{t,i} M_{i,\text{adv}}^t + \epsilon
+}.
+\end{equation}
+该损失只在正优势攻击样本上施加约束，
+其作用不是直接重写攻击目标，
+而是要求通信残差至少能够沿有利动作方向稳定触达攻击 logits。
+
+\xjtuappendixsubsection{同伴冲突边际损失与不确定性感知加权}
+
+设本地策略与同伴意图的 top-1 目标分别为
+\(a_{i,\text{local}}^\star\) 和 \(a_{i,\text{peer}}^\star\)。
+当二者不一致时，
+定义冲突状态指示量
+\begin{equation}
+\mathbb{I}_{i,\text{conf}}^t
+=
+\mathbb{I}
+\left[
+a_{i,\text{peer}}^\star
+\neq
+a_{i,\text{local}}^\star
+\right].
+\end{equation}
+对应的融合 logits 冲突边际为
+\begin{equation}
+m_i^t
+=
+\tilde{\ell}_i^t(a_{i,\text{peer}}^\star)
+-
+\tilde{\ell}_i^t(a_{i,\text{local}}^\star).
+\end{equation}
+则最终融合路径上的同伴冲突边际损失可写为
+\begin{equation}
+L_{\text{peer-conflict}}
+=
+\eta_{\text{pc}}
+\frac{
+\sum_{t,i}
+\bar{\omega}_i^t
+\mathcal{H}_{\beta}
+\left(
+\max(0,\mu-m_i^t)
+\right)
+}{
+\sum_{t,i}\mathbb{I}_{\text{valid}}^t + \epsilon
+},
+\end{equation}
+其中 \(\mathcal{H}_{\beta}(\cdot)\) 为 Huber 惩罚，
+\(\mu\) 为小边际目标，
+\(\bar{\omega}_i^t\) 为最终融合路径上的状态权重。
+
+为了避免在本地策略已经高度自信的状态中进行无差别强干预，
+本文进一步定义本地置信度
+\begin{equation}
+c_{i,\text{local}}^t
+=
+\max_a \pi_{\text{local}}(a|o_i^t),
+\end{equation}
+并构造不确定性感知权重
+\begin{equation}
+u_i^t
+=
+w_{\min}
++
+(1-w_{\min})
+\operatorname{clip}
+\left(
+\frac{c_{\max}-c_{i,\text{local}}^t}{c_{\max}},
+0,1
+\right),
+\end{equation}
+其中 \(w_{\min}\) 为最小保留权重，\(c_{\max}\) 为本地置信度上界。
+最终融合路径使用
+\begin{equation}
+\bar{\omega}_i^t
+=
+\omega_i^t \cdot u_i^t .
+\end{equation}
+这一设计意味着：
+仅攻击通信路径可以在更广泛的冲突状态上学习“朝同伴目标方向修正”，
+而最终融合路径只在本地较不确定的状态中承受更强的同伴冲突压力。
+
+\xjtuappendixsubsection{关键诊断指标定义}
+
+为便于解释通信是否真正进入动作层，
+本文进一步定义若干与正文、附录表格一一对应的诊断指标。
+
+首先，设 \(\operatorname{MA}(\mathbf{v})\) 表示向量各维绝对值的平均，即
+\begin{equation}
+\operatorname{MA}(\mathbf{v})
+=
+\frac{1}{|\mathbf{v}|}
+\sum_k |v_k|.
+\end{equation}
+则攻击残差平均绝对值与有效残差平均绝对值分别定义为
+\begin{equation}
+\overline{\delta}_{\text{raw}}
+=
+\frac{
+\sum_{t,i}\mathbb{I}_{\text{valid}}^t
+\operatorname{MA}(\Delta_i^{\text{att},t})
+}{
+\sum_{t,i}\mathbb{I}_{\text{valid}}^t + \epsilon
+},
+\end{equation}
+\begin{equation}
+\overline{\delta}_{\text{eff}}
+=
+\frac{
+\sum_{t,i}\mathbb{I}_{\text{valid}}^t
+\operatorname{MA}(g_i^{\text{att},t}\Delta_i^{\text{att},t})
+}{
+\sum_{t,i}\mathbb{I}_{\text{valid}}^t + \epsilon
+}.
+\end{equation}
+其中前者衡量通信残差自身幅度，
+后者衡量门控之后真正进入动作层的有效介入强度。
+
+其次，
+在冲突状态上，
+最终融合策略跟随同伴目标的比例与保持本地目标的比例分别定义为
+\begin{equation}
+R_{\text{follow-peer}}
+=
+\frac{
+\sum_{t,i}
+\mathbb{I}_{i,\text{conf}}^t
+\mathbb{I}
+\left[
+a_{i,\text{fused}}^\star
+=
+a_{i,\text{peer}}^\star
+\right]
+}{
+\sum_{t,i}\mathbb{I}_{i,\text{conf}}^t + \epsilon
+},
+\end{equation}
+\begin{equation}
+R_{\text{stay-local}}
+=
+\frac{
+\sum_{t,i}
+\mathbb{I}_{i,\text{conf}}^t
+\mathbb{I}
+\left[
+a_{i,\text{fused}}^\star
+=
+a_{i,\text{local}}^\star
+\right]
+}{
+\sum_{t,i}\mathbb{I}_{i,\text{conf}}^t + \epsilon
+}.
+\end{equation}
+相应地，
+若将 \(a_{i,\text{fused}}^\star\) 替换为仅攻击通信路径上的 top-1 目标，
+即可得到“仅攻击路径跟随同伴比例”。
+
+最后，
+加权本地置信度用于衡量不确定性感知暴露是否真的偏向本地较不确定的样本，
+其定义为
+\begin{equation}
+\bar{c}_{\text{local,w}}
+=
+\frac{
+\sum_{t,i}
+\bar{\omega}_i^t
+c_{i,\text{local}}^t
+}{
+\sum_{t,i}\bar{\omega}_i^t + \epsilon
+}.
+\end{equation}
+若 \(\bar{c}_{\text{local,w}}\) 显著低于未加权的本地置信度均值，
+则说明最终融合路径确实更偏向那些本地策略自身不够确定的状态，
+而不是对所有状态无差别地提高通信介入力度。
+
+\xjtuappendixsection{代表性主线的核心代码摘录}
+
+考虑到完整实现文件同时包含大量输入解析、参数搬运、日志封装与诊断分支，
+本节不再附上可直接运行的工程源码，
+而是给出一份与正文机制一一对应的研究型代码摘录。
+该摘录仅保留双流通信模块、动作层残差介入、攻击意图对齐以及同伴冲突边际修正，
+用于说明本文方法在实现层面的核心结构。
+
+\xjtuappendixsubsection{双流动作层介入主线的核心实现}
+
+{\lstset{
+    language=Python,
+    basicstyle=\ttfamily\scriptsize,
+    columns=fullflexible,
+    keepspaces=true,
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    frame=none,
+    numbers=none,
+    xleftmargin=0pt,
+    framexleftmargin=0pt,
+    aboveskip=0.8\baselineskip,
+    belowskip=0.4\baselineskip
+}
+\lstinputlisting{figures/generated/appendix_agent_core_excerpt.py}
+}

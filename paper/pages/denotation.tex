@@ -26,11 +26,33 @@
 %
 \begin{denotation}
     \item[CTDE] 集中式训练、分布式执行（Centralized Training and Decentralized Execution）
+    \item[MARL] 多智能体强化学习（Multi-Agent Reinforcement Learning）
     \item[MAPPO] 多智能体近端策略优化（Multi-Agent Proximal Policy Optimization）
-    \item[PPO] 近端策略优化（Proximal Policy Optimization）
     \item[SMAC] 星际争霸多智能体挑战基准（StarCraft Multi-Agent Challenge）
+    \item[$N$] 智能体数量
+    \item[$o_i^t$] 智能体 $i$ 在时刻 $t$ 的局部观测
+    \item[$a_i^t$] 智能体 $i$ 在时刻 $t$ 执行的动作
+    \item[$\mathbf{a}^t$] 时刻 $t$ 的联合动作
+    \item[$r_t$] 时刻 $t$ 的共享奖励
     \item[$h_i^t$] 智能体 $i$ 在时刻 $t$ 的局部隐藏状态
-    \item[$m_i^t$] 智能体 $i$ 在时刻 $t$ 接收到的通信消息
-    \item[$\alpha_{ij}^t$] 智能体 $i$ 在时刻 $t$ 对智能体 $j$ 的注意力权重
+    \item[$x^t$] 训练阶段集中式价值函数的输入
+    \item[$z_i^t$] 智能体 $i$ 在时刻 $t$ 的待发送消息表示
+    \item[$\mathcal{N}_i^t$] 智能体 $i$ 在时刻 $t$ 的候选通信对象集合
+    \item[$m_i^t$] 智能体 $i$ 在时刻 $t$ 聚合得到的通信消息
+    \item[$\ell_i^{\text{local}}$] 智能体 $i$ 的局部动作 logits
+    \item[$\tilde{\ell}_i$] 融合通信后的动作 logits
+    \item[$\alpha_{ij}^t$] 智能体 $i$ 在时刻 $t$ 对智能体 $j$ 的通信注意力权重
+    \item[$g_i^t$] 智能体 $i$ 在时刻 $t$ 的通信门控系数
     \item[$\Delta_i^t$] 通信分支对局部动作 logits 的残差修正量
+    \item[$\lambda$] 通信残差注入局部策略的增益系数
+    \item[$a_{i,\text{local}}^{\star}$] 局部策略的 top-1 动作目标
+    \item[$a_{i,\text{peer}}^{\star}$] 同伴聚合意图的 top-1 动作目标
+    \item[$a_{i,\text{fused}}^{\star}$] 融合通信后策略的 top-1 动作目标
+    \item[$p_{\mathrm{comm}}$] 单个决策步中通信支路保持非沉默的概率
+    \item[$k$] 单个决策步中实际激活的接收者数量
+    \item[$d_{\mathrm{exec}}$] 执行期单条通信边真正送入决策支路的消息维度
+    \item[$C_{\mathrm{exec}}$] 单条通信流的执行期通信代价
+    \item[$C_{\mathrm{total}}$] 双流通信的总执行期通信代价
+    \item[$\rho_{\mathrm{topo}}$] 通信拓扑归一化代价比例
+    \item[$\rho_{64}$] 相对 $64$ 维稠密广播的工程归一化代价比例
 \end{denotation}

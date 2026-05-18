@@ -121,6 +121,17 @@ def main() -> None:
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
             "font.size": 11,
+            "font.sans-serif": [
+                "Noto Sans CJK SC",
+                "Source Han Sans SC",
+                "PingFang SC",
+                "Hiragino Sans GB",
+                "Microsoft YaHei",
+                "SimHei",
+                "Arial Unicode MS",
+                "DejaVu Sans",
+            ],
+            "axes.unicode_minus": False,
         }
     )
 
@@ -138,14 +149,14 @@ def main() -> None:
     )
 
     fig, ax = plt.subplots(figsize=(8.8, 4.9))
-    ax.plot(ours_x / 1e6, ours_y, color="#e45756", linewidth=2.5, label="Representative two-phase mainline")
-    ax.plot(maic_x / 1e6, maic_y, color="#4c78a8", linewidth=2.3, label="MAIC continued to 2.0M")
+    ax.plot(ours_x / 1e6, ours_y, color="#e45756", linewidth=2.5, label="稳定通信介入方案")
+    ax.plot(maic_x / 1e6, maic_y, color="#4c78a8", linewidth=2.3, label="MAIC（续跑至 2.0M）")
 
     ax.axvline(OURS_BRANCH_STEP / 1e6, color="#e45756", linestyle="--", linewidth=1.0, alpha=0.5)
     ax.text(
         OURS_BRANCH_STEP / 1e6,
         0.98,
-        "phase-2 start",
+        "第二阶段起点",
         transform=ax.get_xaxis_transform(),
         ha="center",
         va="top",
@@ -153,9 +164,9 @@ def main() -> None:
         color="#b23b3a",
     )
 
-    ax.set_title("Representative mainline vs. MAIC on SMAC 5m_vs_6m", fontsize=13, fontweight="bold")
-    ax.set_xlabel("Env steps (M)")
-    ax.set_ylabel("Test win rate")
+    ax.set_title("SMAC 5m_vs_6m 上稳定通信介入方案与 MAIC 的对比", fontsize=13, fontweight="bold")
+    ax.set_xlabel("环境步数（百万）")
+    ax.set_ylabel("测试胜率")
     ax.set_xlim(left=0.0)
     ax.set_ylim(0.0, 1.0)
     ax.legend(frameon=False, loc="lower right")
