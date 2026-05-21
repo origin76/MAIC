@@ -63,13 +63,13 @@
 \etitle{Research on Multi-Agent Reinforcement Learning Algorithms with Information Exchange}
 
 % 作者姓名，英文
-\eauthor{To Be Filled}
+\eauthor{Zerui Tao}
 
 % 学科，英文，本科生不需要
 \esubject{}
 
 % 导师姓名，英文
-\esupervisor{To Be Filled}
+\esupervisor{Jie Lin}
 
 % 关键词，英文。用半角分号和一个半角空格「; 」分割
 \ekeywords{multi-agent reinforcement learning; explicit communication; centralized training and decentralized execution; MAPPO; action-level intervention}
@@ -93,16 +93,16 @@
 \cabstract{
 多智能体强化学习在协作博弈、群体控制和分布式决策等任务中具有重要应用价值。在部分可观测环境中，单个智能体仅依赖局部观测往往难以形成稳定协同，因此如何在集中式训练、分布式执行范式下，以较低通信代价实现有效而稳定的显式通信，成为当前研究中的关键问题。
 
-本文以 MAPPO 为基础框架，围绕“通信如何稳定进入动作决策”展开研究。针对冷启动通信易放大训练噪声、消息语义不清晰以及通信难以真实作用于动作层等问题，本文提出两阶段训练范式：先训练稳定的无通信主干策略，再从同一检查点出发进行通信热启动微调。在此基础上，本文构建统一的轻量残差通信框架，将通信限制在任务相关的动作子空间中，并依次设计动作意图共享、攻击流选择性路由、沉默预算约束和状态条件化的动作层暴露机制，最终形成稳定通信介入方案。同时，本文建立了包含执行期通信代价、通信隔离评估和同伴建议相对本地决策因果诊断在内的评价体系。
+本文以 MAPPO 为基础框架，围绕“通信如何稳定进入动作决策”展开研究。针对冷启动通信易放大训练噪声、消息语义不清晰以及通信难以真实作用于动作层等问题，本文提出两阶段训练范式：先训练稳定的无通信主干策略，再从同一检查点出发进行通信热启动微调。在此基础上，本文构建统一的轻量残差通信框架，将通信限制在任务相关的动作子空间中，并依次设计选择性路由、沉默预算约束、动作意图共享、同伴冲突边际约束和不确定性感知融合暴露机制，最终形成稳定通信介入方案。同时，本文建立了包含执行期通信代价、通信隔离评估和同伴建议相对本地决策影响诊断在内的评价体系。
 
-实验在原型环境 \texttt{join1}、SMAC 主实验地图 \texttt{5m\_vs\_6m} 以及补充地图 \texttt{MMM2}、\texttt{2c\_vs\_64zg} 上进行。结果表明，通信并非天然有效，缺乏结构约束的冷启动通信可能直接破坏训练，而两阶段训练能够显著提高通信实验的稳定性与可解释性；在 \texttt{5m\_vs\_6m} 上，本文方案实现了低通信代价下的稳定动作层介入，其代表性检查点的总执行期通信预算约为 21.36，仅为仓库内 MAIC 实现粗粒度预算的 44.5\%，并在通信隔离评估中取得了相对禁用攻击通信模式约 4.7\% 的代表性执行期增益；在 \texttt{MMM2} 与 \texttt{2c\_vs\_64zg} 上，本文方案相对于同预算无通信续跑也表现出一定的正向迁移收益。本文研究表明，协作型多智能体显式通信的关键不在于扩大消息容量，而在于构造受约束、可解释且与动作子空间对齐的低成本介入机制。当前工作已经证明通信可以在较低预算下稳定进入动作层并产生可测量收益，但其对本地决策边界的因果改变仍未完全解决。
+实验在原型环境 \texttt{join1}、SMAC 主实验地图 \texttt{5m\_vs\_6m} 以及补充地图 \texttt{MMM2}、\texttt{2c\_vs\_64zg} 上进行。结果表明，通信并非天然有效，缺乏结构约束的冷启动通信可能直接破坏训练，而两阶段训练能够显著提高通信实验的稳定性与可解释性；在 \texttt{5m\_vs\_6m} 上，本文方案实现了低通信代价下的稳定动作层介入，其代表性检查点的总执行期通信预算约为 21.36，仅为仓库内 MAIC 实现粗粒度预算的 44.5\%，并在通信隔离评估中取得了相对禁用攻击通信模式约 4.7\% 的代表性执行期增益；在 \texttt{MMM2} 与 \texttt{2c\_vs\_64zg} 上，本文方案相对于同预算无通信续跑也表现出一定的正向迁移收益。本文研究表明，协作型多智能体显式通信的关键不在于扩大消息容量，而在于构造受约束、可解释且与动作子空间对齐的低成本介入机制。当前工作已经证明通信可以在较低预算下稳定进入动作层并产生可测量收益，但其对本地决策边界的跨越仍未完全解决。
 }
 
 % 摘要，英文。段间空行
 \eabstract{
-Multi-agent reinforcement learning is important for cooperative games, swarm control, and distributed decision-making. In partially observable environments, however, each agent only has access to local observations, which makes stable coordination difficult. A key problem is therefore how to realize effective and stable explicit communication under the centralized training and decentralized execution paradigm with a low communication cost.
+Multi-agent reinforcement learning plays a vital role in cooperative games, swarm control, and distributed decision-making, yet partial observability makes stable coordination particularly challenging. A central problem is how to achieve effective yet low-cost explicit communication under centralized training with decentralized execution.
 
-This thesis studies that problem on top of a MAPPO backbone, focusing on how communication can stably intervene in action decisions. To address cold-start instability, unclear message semantics, and weak action-level influence, a two-phase training paradigm is adopted: a stable no-communication backbone is first trained, and communication-aware fine-tuning is then warm-started from the same checkpoint. Based on this protocol, a lightweight residual communication framework is developed, where communication is restricted to task-relevant action subspaces. Intention sharing, selective routing in the attack stream, silence-budget regularization, and state-conditioned action-level exposure are further introduced, together forming a stable communication intervention scheme. An evaluation framework covering execution-time communication cost, communication isolation evaluation, and peer-versus-local causal diagnostics is also established.
+This thesis studies this problem on a MAPPO backbone, focusing on stable communication intervention in action decisions. To address cold-start instability, ambiguous message semantics, and weak action-level influence, a two-phase paradigm is adopted: first train a stable no-communication backbone, then warm-start communication fine-tuning from the same checkpoint. A unified lightweight residual communication framework is then constructed, restricting communication to task-relevant action subspaces. Selective routing, silence-budget regularization, action-intention sharing, peer-conflict margin constraint, and uncertainty-aware fused exposure are sequentially introduced, forming a stable communication intervention scheme, alongside an evaluation framework covering execution-time communication cost, communication isolation, and peer-versus-local diagnostic analysis.
 
-Experiments are conducted on the prototype environment \texttt{join1}, the main SMAC map \texttt{5m\_vs\_6m}, and two supplementary maps, \texttt{MMM2} and \texttt{2c\_vs\_64zg}. The results show that poorly constrained cold-start communication may directly destabilize training, whereas the proposed two-phase procedure improves stability and interpretability. On \texttt{5m\_vs\_6m}, the proposed scheme achieves stable action-level intervention under a low communication budget: at its representative checkpoint, the total execution-time communication cost is about 21.36, only 44.5\% of the coarse-grained budget of the repository MAIC implementation, while communication isolation evaluation shows a representative gain of about 4.7\% over the no-attack-communication mode. Positive gains over same-budget no-communication continuation are also observed on \texttt{MMM2} and \texttt{2c\_vs\_64zg}. These results indicate that the key to cooperative MARL communication is not to enlarge message capacity blindly, but to construct low-cost mechanisms aligned with action subspaces. The current study verifies stable action-level communication intervention under a low budget, while the causal decision-change problem remains only partially solved.
+Experiments on \texttt{join1}, \texttt{5m\_vs\_6m}, \texttt{MMM2}, and \texttt{2c\_vs\_64zg} show that unconstrained cold-start communication can destabilize training, while the two-phase procedure improves stability and interpretability. On \texttt{5m\_vs\_6m}, the scheme achieves stable action-level intervention at low cost: its total execution-time communication budget is 21.36, merely 44.5\% of the repository MAIC implementation, with a 4.7\% gain over the no-attack-communication mode in isolation evaluation. Gains over same-budget no-communication continuation are also observed on \texttt{MMM2} and \texttt{2c\_vs\_64zg}. These findings suggest that effective MARL communication hinges not on expanding message capacity, but on constructing constrained, interpretable mechanisms aligned with action subspaces. This work demonstrates stable communication intervention at the action layer under a low budget, while crossing the local decision boundary remains an open challenge.
 }

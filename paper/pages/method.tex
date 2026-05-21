@@ -127,7 +127,7 @@ m_i^t=\sum_{j \in \mathcal{N}_i^t}\alpha_{ij}^t v_j^t.
 \subsection{执行期通信代价度量}
 \esubsection{Execution-Time Communication Cost}
 
-除了比较胜率与稳定性之外，本文还希望回答另一个问题：当前主线方法是否依赖于高带宽通信。为此，本文不直接使用网络参数量或训练期额外分支数作为通信开销，而是定义一个更贴近分布式执行阶段的度量指标，即每个智能体步上的期望执行期通信维数
+除了比较胜率与稳定性之外，本文还希望回答另一个问题：稳定通信介入方案是否依赖于高带宽通信。为此，本文不直接使用网络参数量或训练期额外分支数作为通信开销，而是定义一个更贴近分布式执行阶段的度量指标，即每个智能体步上的期望执行期通信维数
 \begin{equation}
 C_{\mathrm{exec}} = p_{\mathrm{comm}} \cdot k \cdot d_{\mathrm{exec}},
 \label{eq:comm_cost_exec}

@@ -114,12 +114,12 @@
 其三，通过同伴冲突边际损失把通信压力集中到更具协同价值的冲突状态；
 其四，通过不确定性感知暴露避免在本地策略高置信状态上进行全局性强干预。
 
-\xjtuappendixsection{通信隔离评估与 peer-local 因果诊断细表}
+\xjtuappendixsection{通信隔离评估与 peer-local 决策影响诊断细表}
 
 本节对正文中的两类机制性评估进行补充展开。
 第一类是执行期通信隔离评估，
 用于判断攻击通信在保持其余网络不变时是否具有可观测边际收益；
-第二类是 \textit{peer-local} 因果诊断，
+第二类是 \textit{peer-local} 决策影响诊断，
 用于分析通信在“同伴目标与本地目标冲突”的状态中是否真正改变了最终攻击决策。
 
 \xjtuappendixsubsection{四种执行期隔离模式说明}
@@ -158,17 +158,17 @@
 而是来自训练后形成的中等门控工作区间。
 这一点与正文中“通信已进入动作层，但并非依赖硬饱和工作”的结论相一致。
 
-\xjtuappendixsubsection{早期低介入基线的因果诊断细表}
+\xjtuappendixsubsection{早期低介入基线的决策影响诊断细表}
 
 为了说明本文修正主线所针对的具体瓶颈，
 表 \ref{tab:appendix_signsplit_diag} 给出早期 \textit{sign-split} 基线在三 seed 上的
-\textit{peer-local} 因果诊断均值。
+\textit{peer-local} 决策影响诊断均值。
 这一配置已经基本压住了沉默逃逸，
 但通信残差仍几乎无法跨过本地攻击边界。
 
 \begin{table}[htbp]
     \centering
-    \caption{早期低介入基线的 \textit{peer-local} 因果诊断均值}
+    \caption{早期低介入基线的 \textit{peer-local} 决策影响诊断均值}
     \label{tab:appendix_signsplit_diag}
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
@@ -198,16 +198,16 @@
 导致最终动作目标几乎从不发生改变。
 这也解释了为何后续改进必须转向“通信到动作层介入”而不是继续围绕样本对齐策略微调。
 
-\xjtuappendixsubsection{稳定通信介入方案的末段因果诊断统计}
+\xjtuappendixsubsection{稳定通信介入方案的末段决策影响诊断统计}
 
-表 \ref{tab:appendix_v5b_diag} 汇总了稳定通信介入方案在三 seed 末段的关键因果诊断统计。
+表 \ref{tab:appendix_v5b_diag} 汇总了稳定通信介入方案在三 seed 末段的关键决策影响诊断统计。
 与表 \ref{tab:appendix_signsplit_diag} 相比，
 这一结果反映的已不再是“通信无法进入动作层”，
 而是“通信已稳定进入动作层，但仍较少跨越本地决策边界”的新瓶颈。
 
 \begin{table}[htbp]
     \centering
-    \caption{稳定通信介入方案的末段因果诊断统计（3 seed 均值）}
+    \caption{稳定通信介入方案的末段决策影响诊断统计（3 seed 均值）}
     \label{tab:appendix_v5b_diag}
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
@@ -234,7 +234,7 @@
 该结果已经能够同时满足非沉默、健康门控、非零有效残差与较高任务性能，
 说明通信进入动作层的暴露瓶颈已被修复；
 但最终融合策略保持本地目标的比例仍接近 1，
-表明“因果性决策改变”问题尚未彻底解决。
+表明”跨越本地决策边界”问题尚未彻底解决。
 
 \xjtuappendixsection{关键辅助损失与诊断指标的完整定义}
 
