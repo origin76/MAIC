@@ -32,14 +32,26 @@ import matplotlib.pyplot as plt
 
 plt.rcParams.update(
     {
+        "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
+        "font.serif": [
+            "SimSun",
+            "Songti SC",
+            "STSong",
+            "Noto Serif CJK SC",
+            "Source Han Serif SC",
+            "AR PL UMing CN",
+            "Times New Roman",
+            "Times",
+            "Nimbus Roman",
+            "DejaVu Serif",
+        ],
         "font.sans-serif": [
-            "Noto Sans CJK SC",
-            "Source Han Sans SC",
-            "PingFang SC",
-            "Hiragino Sans GB",
-            "Microsoft YaHei",
-            "SimHei",
-            "Arial Unicode MS",
+            "SimSun",
+            "Songti SC",
+            "STSong",
+            "Noto Serif CJK SC",
+            "Source Han Serif SC",
+            "AR PL UMing CN",
             "DejaVu Sans",
         ],
         "axes.unicode_minus": False,
@@ -392,7 +404,6 @@ def draw_join1_curves(ax: plt.Axes, curves: list[Join1Curve]) -> None:
         x_scaled = curve.x / scale
         ax.plot(x_scaled, curve.y, linewidth=2.4, label=curve.spec.label)
         annotate_curve_endpoint(ax, x_scaled, curve.y, label_offsets.get(idx, 0.0))
-    ax.set_title("join1 原型环境")
     ax.set_ylabel("测试胜率")
     ax.set_ylim(-0.05, 1.05)
     ax.set_xlim(0.0, JOIN1_MAX_T_ENV / scale)
@@ -554,11 +565,10 @@ def plot_baseline(output_dir: Path) -> None:
             alpha=0.12,
             linewidth=0.0,
         )
-        ax.set_title(spec.label)
+        ax.set_title(spec.label, fontsize=12)
         ax.set_ylim(-0.02, 0.8)
         ax.legend(frameon=False)
     axes[0].set_ylabel("测试胜率")
-    fig.suptitle("Vanilla MAPPO 主干：无通信主干与无通信热启动对照", y=1.02, fontsize=14, fontweight="bold")
     save_figure(fig, output_dir / "baseline_officialish_vs_warmstart.png")
 
 
@@ -605,7 +615,6 @@ def plot_mappo_backbone(output_dir: Path) -> None:
         alpha=0.12,
         linewidth=0.0,
     )
-    ax.set_title("SMAC 5m_vs_6m 上的无通信热启动对照轨迹")
     ax.set_ylabel("测试胜率")
     ax.set_ylim(-0.02, 1.0)
     ax.legend(

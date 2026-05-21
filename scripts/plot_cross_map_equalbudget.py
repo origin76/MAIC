@@ -193,14 +193,26 @@ def main() -> None:
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
             "font.size": 11,
+            "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
+            "font.serif": [
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
+                "Times New Roman",
+                "Times",
+                "Nimbus Roman",
+                "DejaVu Serif",
+            ],
             "font.sans-serif": [
-                "Noto Sans CJK SC",
-                "Source Han Sans SC",
-                "PingFang SC",
-                "Hiragino Sans GB",
-                "Microsoft YaHei",
-                "SimHei",
-                "Arial Unicode MS",
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
                 "DejaVu Sans",
             ],
             "axes.unicode_minus": False,
@@ -214,13 +226,7 @@ def main() -> None:
 
     handles, labels = axes[1].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.02))
-    fig.suptitle(
-        "跨地图等预算分叉对照：共同主干轨迹与后续续跑结果",
-        fontsize=13,
-        fontweight="bold",
-        y=0.98,
-    )
-    fig.tight_layout(rect=(0, 0.05, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(output_path, bbox_inches="tight")
     print(output_path)
 

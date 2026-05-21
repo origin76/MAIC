@@ -127,14 +127,26 @@ def main() -> None:
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
             "font.size": 11,
+            "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
+            "font.serif": [
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
+                "Times New Roman",
+                "Times",
+                "Nimbus Roman",
+                "DejaVu Serif",
+            ],
             "font.sans-serif": [
-                "Noto Sans CJK SC",
-                "Source Han Sans SC",
-                "PingFang SC",
-                "Hiragino Sans GB",
-                "Microsoft YaHei",
-                "SimHei",
-                "Arial Unicode MS",
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
                 "DejaVu Sans",
             ],
             "axes.unicode_minus": False,
@@ -173,7 +185,6 @@ def main() -> None:
         color="#b23b3a",
     )
 
-    ax.set_title("SMAC 5m_vs_6m 上稳定通信介入方案、MAIC 与 QMIX 的对比", fontsize=13, fontweight="bold")
     ax.set_xlabel("环境步数（百万）")
     ax.set_ylabel("测试胜率")
     ax.set_xlim(left=0.0)

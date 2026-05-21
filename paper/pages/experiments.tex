@@ -121,20 +121,16 @@ g\cdot
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{7pt}
-    \begin{tabular}{|l|c|c|c|c|}
-        \hline
+    \begin{tabular}{lcccc}
+        \toprule
         配置 & 攻击熵 & 无通信概率 & 攻击门控 & 平均峰值胜率 \\
-        \hline
+        \midrule
         原始攻击流 & 0.000 & 0.01--0.02 & 0.06--0.07 & 0.629 \\
-        \hline
         仅放宽路由约束 & 0.693 & 0.87 & 0.06 & -- \\
-        \hline
         路由稳定化 & 0.350 & 0.87 & 0.06 & -- \\
-        \hline
         路由稳定化 + 沉默预算 & 0.429 & 0.011 & 0.061 & 0.704 \\
-        \hline
         路由稳定化 + 沉默预算 + 意图对齐 & 0.449 & 0.010 & 0.067 & 0.746 \\
-        \hline
+        \bottomrule
     \end{tabular}
     }
 \end{table}
@@ -167,16 +163,14 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{2.6cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{1.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
-        \hline
-        阶段 & 攻击门控均值 & 有效动作扰动 & 融合策略跟随同伴比例 & 机制含义 \\
-        \hline
+    \begin{tabularx}{0.96\textwidth}{>{\centering\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.7cm}>{\centering\arraybackslash}p{1.7cm}>{\centering\arraybackslash}p{1.9cm}X}
+        \toprule
+        阶段 & 门控均值 & 有效扰动 & 跟随同伴比例 & 机制含义 \\
+        \midrule
         早期低介入阶段 & 0.0728 & 0.0006 & 0.0000 & 通信已存在，但几乎不改变最终攻击决策 \\
-        \hline
         首次稳定介入阶段 & 0.5792 & 0.0922 & 0.0171 & 通信首次稳定进入攻击动作层 \\
-        \hline
         稳定动作层介入阶段 & 0.5141 & 0.0916 & 0.0141 & 介入力度保持稳定，并避免退回零介入区间 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -197,18 +191,15 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{8pt}
-    \begin{tabular}{|c|c|c|}
-        \hline
+    \begin{tabular}{ccc}
+        \toprule
         Seed & final win & last5 win \\
-        \hline
+        \midrule
         1 & 0.6250 & 0.5625 \\
-        \hline
         2 & 0.9375 & 0.7250 \\
-        \hline
         3 & 0.6250 & 0.6375 \\
-        \hline
         Mean & 0.7292 & 0.6417 \\
-        \hline
+        \bottomrule
     \end{tabular}}
 \end{table}
 
@@ -218,19 +209,16 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \label{tab:v5b_three_seed_comm}
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
-    \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{1.2cm}|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|}
-        \hline
-        Seed & gate last5 & no-comm last5 & entropy last5 & effective delta last5 & fused follow peer last5 \\
-        \hline
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabularx}{0.96\textwidth}{>{\centering\arraybackslash}p{1.0cm}>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X}
+        \toprule
+        Seed & 门控 & 无通信 & 熵 & 有效扰动 & 跟随同伴 \\
+        \midrule
         1 & 0.5364 & 0.0106 & 0.4453 & 0.0930 & 0.0068 \\
-        \hline
         2 & 0.4416 & 0.0069 & 0.4476 & 0.0740 & 0.0243 \\
-        \hline
         3 & 0.5642 & 0.0075 & 0.4356 & 0.1077 & 0.0113 \\
-        \hline
         Mean & 0.5141 & 0.0083 & 0.4428 & 0.0916 & 0.0141 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -245,25 +233,19 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \label{tab:healthy_comm_stats}
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
-    \setlength{\tabcolsep}{7pt}
-    \begin{tabularx}{0.96\textwidth}{|p{3.8cm}|>{\centering\arraybackslash}p{2.2cm}|X|}
-        \hline
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.96\textwidth}{p{3.2cm}>{\centering\arraybackslash}p{2.0cm}X}
+        \toprule
         指标 & 数值 & 说明 \\
-        \hline
+        \midrule
         攻击无通信概率 & 0.0083 & 攻击流没有通过“无通信”选项退回沉默 \\
-        \hline
         攻击门控均值 & 0.5141 & 通信被持续使用，但并不依赖硬开门或门控饱和 \\
-        \hline
         攻击注意力熵 & 0.4428 & 路由保持选择性，既未再次塌缩，也未退化为平均分配 \\
-        \hline
         有效动作扰动 & 0.0916 & 通信残差已稳定进入攻击动作层，而非停留在隐藏表示内部 \\
-        \hline
         冲突样本占比 & 0.1326 & 训练过程中确有一部分状态需要区分本地意图与同伴意图 \\
-        \hline
         不确定性权重 & 0.4805 & 融合暴露并非全局均匀施压，而是保持状态条件调节 \\
-        \hline
-        加权本地置信度 / 本地置信度 & 0.8401 / 0.9120 & 说明融合损失确实更偏向本地更不确定的样本，而非无差别推动所有状态 \\
-        \hline
+        加权本地置信度 / 原始本地置信度 & 0.8401 / 0.9120 & 说明融合损失更偏向本地不确定样本，而非无差别推动所有状态 \\
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -279,13 +261,13 @@ a_{i,\text{peer}}^{\star} \neq a_{i,\text{local}}^{\star}.
     \label{tab:comm_isolation}
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
-    \setlength{\tabcolsep}{7pt}
-    \begin{tabularx}{0.90\textwidth}{|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}p{2.4cm}|}
-        \hline
-        正常模式 & 强制开门 & 强制关门 & 禁用攻击通信 & 增益（正常$-$禁用） \\
-        \hline
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabularx}{0.90\textwidth}{>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}p{2.0cm}}
+        \toprule
+        正常 & 开门 & 关门 & 禁用 & 增益 \\
+        \midrule
         0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -314,18 +296,15 @@ C_{\mathrm{total}} = C_{\mathrm{attack}} + C_{\mathrm{move}}.
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{7pt}
-    \begin{tabular}{|p{3.9cm}|p{4.2cm}|c|c|c|c|}
-        \hline
+    \begin{tabular}{p{3.9cm}p{4.2cm}cccc}
+        \toprule
         方法 & 路由形态 & $p_{\mathrm{comm}}$ & $k$ & $d_{\mathrm{exec}}$ & 执行期通信代价 \\
-        \hline
+        \midrule
         本文方案攻击流 & 选择性 top-$2$ + 可沉默 & 0.9931 & 2 & 8 & 15.9 \\
-        \hline
         本文方案移动流 & 稀疏 top-$2$ + 高沉默 & 0.3418 & 2 & 8 & 5.47 \\
-        \hline
         本文方案总预算 & 双流合计 & -- & -- & -- & 21.36 \\
-        \hline
         MAIC & 稠密全连接动作偏置 & 1.0000 & 4 & 12 & 48.0 \\
-        \hline
+        \bottomrule
     \end{tabular}
     }
 \end{table}

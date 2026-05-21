@@ -376,7 +376,7 @@
 
 % Geometry specifications
 \topmargin=-1in % 消除页眉-边界距离初始值
-\headheight=5.5mm % 该设定使得效果与官方doc模板相似
+\headheight=16.35pt % 与当前 fancyhdr 页眉内容匹配，避免页眉高度告警
 \textheight=242mm % 297-30-25
 \footskip=7.5mm
 \setlength\voffset{2cm} % 规范：页眉距边界2.0cm, one inch + \voffset + \topmargin = 2cm.
@@ -528,7 +528,7 @@
       \fancyhead[CE]{\wuhao \ifxjtu@bachelor
                         西安交通大学本科毕业设计（论文）
                         \fi}
-      \fancyfoot[OR,EL]{\xiaowu ~\thepage~}
+      \fancyfoot[OR,EL]{\wuhao ~\thepage~}
       \renewcommand{\headrulewidth}{\if@mainmatter 0.5pt\else 0pt \fi}
       \renewcommand{\headrule}{\vskip 3.5pt \hrule \@height \headrulewidth \@width \headwidth \vskip .5pt
       \hrule \@height \headrulewidth \@width \headwidth \vskip -\headrulewidth}
@@ -642,7 +642,7 @@
                 \fancyhead[CO]{\wuhao \ifxjtu@bachelor
                                 西安交通大学本科毕业设计（论文）
                                 \fi}
-                \fancyfoot[ER,OL]{\small ~\thepage~}
+                \fancyfoot[ER,OL]{\wuhao ~\thepage~}
                 \renewcommand{\headrulewidth}{\if@mainmatter 0.5pt\else 0pt \fi}
                 \renewcommand{\headrule}{\hrule \@height \headrulewidth \@width \headwidth \vskip .5pt
                 \hrule \@height \headrulewidth \@width \headwidth \vskip -\headrulewidth}

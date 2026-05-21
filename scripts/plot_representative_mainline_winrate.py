@@ -81,14 +81,26 @@ def main() -> None:
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
             "font.size": 11,
+            "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
+            "font.serif": [
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
+                "Times New Roman",
+                "Times",
+                "Nimbus Roman",
+                "DejaVu Serif",
+            ],
             "font.sans-serif": [
-                "Noto Sans CJK SC",
-                "Source Han Sans SC",
-                "PingFang SC",
-                "Hiragino Sans GB",
-                "Microsoft YaHei",
-                "SimHei",
-                "Arial Unicode MS",
+                "SimSun",
+                "Songti SC",
+                "STSong",
+                "Noto Serif CJK SC",
+                "Source Han Serif SC",
+                "AR PL UMing CN",
                 "DejaVu Sans",
             ],
             "axes.unicode_minus": False,
@@ -135,7 +147,6 @@ def main() -> None:
     ax.axvline(anchor_x_m, color="#222222", linestyle="--", linewidth=1.1, alpha=0.75)
     ax.text(anchor_x_m, 0.98, "热启动分叉点", transform=ax.get_xaxis_transform(), ha="center", va="top", fontsize=9, color="#222222")
 
-    ax.set_title("SMAC 5m_vs_6m 上稳定通信介入方案的代表性胜率轨迹", fontsize=13, fontweight="bold")
     ax.set_xlabel("环境步数（百万）")
     ax.set_ylabel("测试胜率")
     ax.set_ylim(0.0, 1.0)

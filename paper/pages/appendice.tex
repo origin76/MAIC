@@ -50,36 +50,24 @@
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
-        \hline
+    \begin{tabularx}{0.96\textwidth}{>{\raggedright\arraybackslash}p{3.8cm}>{\centering\arraybackslash}p{2.0cm}X}
+        \toprule
         参数 & 取值 & 作用说明 \\
-        \hline
+        \midrule
         主干算法 & MAPPO & 采用共享参数 Actor 与集中式 Critic 的 CTDE 训练框架 \\
-        \hline
         每步并行环境数 & 4 & 每次并行环境交互的环境数 \\
-        \hline
         PPO 小批量规模 & 8 & PPO 更新时的小批量规模 \\
-        \hline
         隐藏状态维度 & 64 & 局部循环策略网络隐藏状态维度 \\
-        \hline
         PPO 更新轮数 & 6 & 每轮采样后的 PPO 更新轮数 \\
-        \hline
         PPO 截断系数 & 0.2 & PPO 截断系数 \\
-        \hline
         策略熵系数 & 0.02 & 策略熵正则系数 \\
-        \hline
         Actor / Critic 学习率 & $1\times10^{-4}$ / $3\times10^{-4}$ & Actor 与 Critic 学习率 \\
-        \hline
         梯度裁剪上界 & 5 & 防止热启动阶段梯度过大 \\
-        \hline
         第二阶段训练步数 & 500000 & 热启动后的通信微调时长 \\
-        \hline
         热启动步数 & 1404757 & 从稳定无通信主干检查点开始微调 \\
-        \hline
         继承策略 / 价值函数 & True / True & 第二阶段同时继承主干策略与价值函数 \\
-        \hline
         继承价值归一化 & True & 继承价值归一化统计，降低热启动漂移 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -92,48 +80,30 @@
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\raggedright\arraybackslash}p{4.8cm}|>{\centering\arraybackslash}p{1.9cm}|X|}
-        \hline
+    \begin{tabularx}{0.96\textwidth}{>{\raggedright\arraybackslash}p{4.8cm}>{\centering\arraybackslash}p{1.9cm}X}
+        \toprule
         参数 & 取值 & 作用说明 \\
-        \hline
+        \midrule
         通信注意力维度 & 16 & query/key 投影维度 \\
-        \hline
         攻击 / 移动消息维度 & 8 / 8 & 攻击流与移动流的单边消息维度 \\
-        \hline
         攻击 / 移动保留邻居数 & 2 / 2 & 两条通信流每步最多保留的接收者数量 \\
-        \hline
         显式禁止通信选项 & True & 用于按需沉默 \\
-        \hline
         攻击残差基础增益 & 0.5 & 攻击残差注入动作层的基础增益 \\
-        \hline
         攻击门控上界 & 0.6 & 限制最大介入力度 \\
-        \hline
         攻击沉默预算惩罚 & 0.3 & 抑制无通信逃逸 \\
-        \hline
         攻击目标沉默比例 & 0.30 & 攻击流允许的目标沉默比例 \\
-        \hline
         攻击目标熵 & 0.50 & 攻击注意力的目标选择性熵 \\
-        \hline
         攻击熵损失权重 & 0.005 & 攻击熵目标损失权重 \\
-        \hline
         融合路径冲突边际损失权重 & 0.005 & 最终融合路径上的同伴冲突边际损失权重 \\
-        \hline
         攻击路径冲突边际损失权重 & 0.02 & 仅攻击通信路径上的同伴冲突边际损失权重 \\
-        \hline
         同伴冲突目标边际 & 0.03 & 同伴目标相对本地目标的目标边际 \\
-        \hline
         边际 Huber 平滑参数 & 0.02 & 边际损失中的 Huber 平滑参数 \\
-        \hline
         同伴置信度阈值 & 0.70 & 仅在同伴意图足够置信时施加冲突修正 \\
-        \hline
         本地置信度截断上界 & 0.90 & 不确定性感知暴露中的本地置信度上界 \\
-        \hline
         最小不确定性权重 & 0.40 & 最终融合路径上保留的最小不确定性权重 \\
-        \hline
         移动残差基础增益 & 0.05 & 移动流采用更弱残差，以避免高熵扩散 \\
-        \hline
         移动目标沉默比例 & 0.65 & 移动流保持较高按需沉默比例 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -173,12 +143,12 @@
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{7pt}
-    \begin{tabular}{|c|c|c|c|c|}
-        \hline
-        正常模式 & 强制开门 & 强制关门 & 禁用攻击通信 & 增益（正常$-$禁用） \\
-        \hline
+    \begin{tabular}{ccccc}
+        \toprule
+        正常 & 开门 & 关门 & 禁用 & 增益 \\
+        \midrule
         0.711 & 0.656 & 0.664 & 0.664 & $+0.047$ \\
-        \hline
+        \bottomrule
     \end{tabular}}
 \end{table}
 
@@ -203,30 +173,21 @@
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{4.0cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
-        \hline
+    \begin{tabularx}{0.96\textwidth}{>{\centering\arraybackslash}p{3.6cm}>{\centering\arraybackslash}p{2.0cm}X}
+        \toprule
         指标 & 均值 & 含义说明 \\
-        \hline
+        \midrule
         冲突状态占比 & 0.1130 & 同伴 top-1 目标与本地 top-1 目标不一致的有效攻击状态比例 \\
-        \hline
         同伴 top-1 置信度 & 0.9253 & 同伴聚合意图在冲突状态中的平均置信度 \\
-        \hline
         本地 top-1 置信度 & 0.9110 & 本地策略在对应状态中的平均置信度 \\
-        \hline
         无通信概率 & 0.0019 & 沉默逃逸已基本被压制 \\
-        \hline
         攻击门控均值 & 0.0728 & 通信门控仍处于明显偏低区间 \\
-        \hline
         残差平均绝对值 & 0.0824 & 未乘门控前的攻击残差幅度 \\
-        \hline
         有效残差平均绝对值 & 0.0006 & 门控后真正进入动作层的有效残差几乎为零 \\
-        \hline
         仅攻击路径跟随同伴比例 & 0.0023 & 即使去掉最终融合抑制，仅攻击通信路径也几乎不跟随同伴目标 \\
-        \hline
         最终融合跟随同伴比例 & 0.0000 & 融合策略几乎从不跨过本地 top-1 边界 \\
-        \hline
         最终融合保持本地比例 & 1.0000 & 冲突状态中最终决策完全由本地策略主导 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
@@ -251,30 +212,21 @@
     {\renewcommand{\arraystretch}{1.28}
     \setlength{\extrarowheight}{1pt}
     \setlength{\tabcolsep}{6pt}
-    \begin{tabularx}{0.96\textwidth}{|>{\centering\arraybackslash}p{4.0cm}|>{\centering\arraybackslash}p{2.0cm}|X|}
-        \hline
+    \begin{tabularx}{0.96\textwidth}{>{\centering\arraybackslash}p{3.6cm}>{\centering\arraybackslash}p{2.0cm}X}
+        \toprule
         指标 & 均值 & 含义说明 \\
-        \hline
+        \midrule
         攻击门控末段均值 & 0.5141 & 攻击通信保持在中等偏开的健康区间 \\
-        \hline
         攻击无通信概率末段均值 & 0.0083 & 攻击流没有重新退回沉默 \\
-        \hline
         攻击注意力熵末段均值 & 0.4428 & 路由保持选择性，未塌缩也未退化为平均分配 \\
-        \hline
         有效残差末段均值 & 0.0916 & 通信残差已稳定进入攻击动作层 \\
-        \hline
         冲突状态占比末段均值 & 0.1326 & 训练后段仍存在非零同伴冲突状态 \\
-        \hline
         同伴 top-1 跟随率（仅攻击路径） & 0.0275 & 仅攻击通信路径能够有限地朝同伴目标移动 \\
-        \hline
         同伴 top-1 跟随率（最终融合） & 0.0141 & 最终融合后的跟随率仍明显偏低 \\
-        \hline
         保持本地目标比例（最终融合） & 0.9854 & 最终动作仍以本地策略为主导 \\
-        \hline
         加权本地置信度末段均值 & 0.8401 & 不确定性感知暴露更偏向本地较不确定的样本 \\
-        \hline
         原始本地置信度末段均值 & 0.9120 & 与上一项的差值反映了状态条件化筛选确实生效 \\
-        \hline
+        \bottomrule
     \end{tabularx}}
 \end{table}
 
