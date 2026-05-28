@@ -30,33 +30,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-plt.rcParams.update(
-    {
-        "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
-        "font.serif": [
-            "SimSun",
-            "Songti SC",
-            "STSong",
-            "Noto Serif CJK SC",
-            "Source Han Serif SC",
-            "AR PL UMing CN",
-            "Times New Roman",
-            "Times",
-            "Nimbus Roman",
-            "DejaVu Serif",
-        ],
-        "font.sans-serif": [
-            "SimSun",
-            "Songti SC",
-            "STSong",
-            "Noto Serif CJK SC",
-            "Source Han Serif SC",
-            "AR PL UMing CN",
-            "DejaVu Sans",
-        ],
-        "axes.unicode_minus": False,
-    }
-)
+from mpl_font_utils import apply_paper_font_rcparams
+
+apply_paper_font_rcparams(plt)
 
 
 @dataclass(frozen=True)
@@ -275,29 +251,19 @@ JOIN1_MAX_T_ENV = 500_000.0
 JOIN1_SMOOTH_WINDOW = 5
 
 
-plt.rcParams.update(
-    {
-        "figure.dpi": 150,
-        "savefig.dpi": 180,
+apply_paper_font_rcparams(
+    plt,
+    font_size=11,
+    figure_dpi=150,
+    savefig_dpi=180,
+    extra={
         "axes.spines.top": False,
         "axes.spines.right": False,
         "axes.grid": True,
         "grid.alpha": 0.22,
         "grid.linestyle": "--",
-        "font.size": 11,
         "axes.titleweight": "bold",
-        "font.sans-serif": [
-            "Noto Sans CJK SC",
-            "Source Han Sans SC",
-            "PingFang SC",
-            "Hiragino Sans GB",
-            "Microsoft YaHei",
-            "SimHei",
-            "Arial Unicode MS",
-            "DejaVu Sans",
-        ],
-        "axes.unicode_minus": False,
-    }
+    },
 )
 
 

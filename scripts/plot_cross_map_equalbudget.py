@@ -25,6 +25,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from mpl_font_utils import apply_paper_font_rcparams
+
 
 STATS_RE = re.compile(r"Recent Stats \| t_env:\s*([0-9]+)")
 WIN_RE = re.compile(r"test_battle_won_mean:\s*([0-9.]+)")
@@ -183,40 +185,18 @@ def main() -> None:
     output_path = ROOT / "paper/figures/generated/cross_map_equalbudget_comparison.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    plt.rcParams.update(
-        {
-            "figure.dpi": 150,
-            "savefig.dpi": 220,
+    apply_paper_font_rcparams(
+        plt,
+        font_size=11,
+        figure_dpi=150,
+        savefig_dpi=220,
+        extra={
             "axes.spines.top": False,
             "axes.spines.right": False,
             "axes.grid": True,
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
-            "font.size": 11,
-            "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
-            "font.serif": [
-                "SimSun",
-                "Songti SC",
-                "STSong",
-                "Noto Serif CJK SC",
-                "Source Han Serif SC",
-                "AR PL UMing CN",
-                "Times New Roman",
-                "Times",
-                "Nimbus Roman",
-                "DejaVu Serif",
-            ],
-            "font.sans-serif": [
-                "SimSun",
-                "Songti SC",
-                "STSong",
-                "Noto Serif CJK SC",
-                "Source Han Serif SC",
-                "AR PL UMing CN",
-                "DejaVu Sans",
-            ],
-            "axes.unicode_minus": False,
-        }
+        },
     )
 
     fig, axes = plt.subplots(1, 2, figsize=(12.2, 4.8), sharey=False)

@@ -23,6 +23,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from mpl_font_utils import apply_paper_font_rcparams
+
 
 OURS_BACKBONE_JSON = ROOT / (
     "results/sc2/5m_vs_6m/"
@@ -117,40 +119,18 @@ def build_stitched_curve(
 def main() -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    plt.rcParams.update(
-        {
-            "figure.dpi": 150,
-            "savefig.dpi": 220,
+    apply_paper_font_rcparams(
+        plt,
+        font_size=11,
+        figure_dpi=150,
+        savefig_dpi=220,
+        extra={
             "axes.spines.top": False,
             "axes.spines.right": False,
             "axes.grid": True,
             "grid.alpha": 0.22,
             "grid.linestyle": "--",
-            "font.size": 11,
-            "font.family": ["SimSun", "Times New Roman", "DejaVu Serif"],
-            "font.serif": [
-                "SimSun",
-                "Songti SC",
-                "STSong",
-                "Noto Serif CJK SC",
-                "Source Han Serif SC",
-                "AR PL UMing CN",
-                "Times New Roman",
-                "Times",
-                "Nimbus Roman",
-                "DejaVu Serif",
-            ],
-            "font.sans-serif": [
-                "SimSun",
-                "Songti SC",
-                "STSong",
-                "Noto Serif CJK SC",
-                "Source Han Serif SC",
-                "AR PL UMing CN",
-                "DejaVu Sans",
-            ],
-            "axes.unicode_minus": False,
-        }
+        },
     )
 
     ours_x, ours_y = build_stitched_curve(

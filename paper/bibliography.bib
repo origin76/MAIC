@@ -49,22 +49,13 @@
   series = {NIPS '22}
 }
 
-@inproceedings{DBLP:journals/corr/SchulmanMLJA15,
-  author       = {John Schulman and
-                  Philipp Moritz and
-                  Sergey Levine and
-                  Michael I. Jordan and
-                  Pieter Abbeel},
-  editor       = {Yoshua Bengio and
-                  Yann LeCun},
-  title        = {High-Dimensional Continuous Control Using Generalized Advantage Estimation},
-  booktitle    = {4th International Conference on Learning Representations, {ICLR} 2016,
-                  San Juan, Puerto Rico, May 2-4, 2016, Conference Track Proceedings},
-  year         = {2016},
-  url          = {http://arxiv.org/abs/1506.02438},
-  timestamp    = {Thu, 25 Jul 2019 14:25:38 +0200},
-  biburl       = {https://dblp.org/rec/journals/corr/SchulmanMLJA15.bib},
-  bibsource    = {dblp computer science bibliography, https://dblp.org}
+@article{Schulman2015HighDimensionalCC,
+  title={High-Dimensional Continuous Control Using Generalized Advantage Estimation},
+  author={John Schulman and Philipp Moritz and Sergey Levine and Michael I. Jordan and P. Abbeel},
+  journal={CoRR},
+  year={2015},
+  volume={abs/1506.02438},
+  url={https://api.semanticscholar.org/CorpusID:3075448}
 }
 
 @inproceedings{10.5555/3295222.3295349,
@@ -177,20 +168,13 @@
   year      = {2018}
 }
 
-@article{DBLP:journals/corr/BaKH16,
-  author       = {Lei Jimmy Ba and
-                  Jamie Ryan Kiros and
-                  Geoffrey E. Hinton},
-  title        = {Layer Normalization},
-  journal      = {CoRR},
-  volume       = {abs/1607.06450},
-  year         = {2016},
-  url          = {http://arxiv.org/abs/1607.06450},
-  eprinttype   = {arXiv},
-  eprint       = {1607.06450},
-  timestamp    = {Tue, 23 Jul 2019 17:33:23 +0200},
-  biburl       = {https://dblp.org/rec/journals/corr/BaKH16.bib},
-  bibsource    = {dblp computer science bibliography, https://dblp.org}
+@article{Ba2016LayerN,
+  title={Layer Normalization},
+  author={Jimmy Ba and Jamie Ryan Kiros and Geoffrey E. Hinton},
+  journal={ArXiv},
+  year={2016},
+  volume={abs/1607.06450},
+  url={https://api.semanticscholar.org/CorpusID:8236317}
 }
 
 @inproceedings{10.5555/3045390.3045561,
@@ -379,4 +363,128 @@
   numpages = {32},
   location = {Vancouver, BC, Canada},
   series = {NIPS '24}
+}
+
+@inproceedings{kim2019schednet,
+  title={Learning to Schedule Communication in Multi-agent Reinforcement Learning},
+  author={Daewoo Kim and Sangwoo Moon and David Hostallero and Wan Ju Kang and Taeyoung Lee and Kyunghwan Son and Yung Yi},
+  booktitle={International Conference on Learning Representations},
+  year={2019},
+  url={https://openreview.net/forum?id=SJxu5iR9KQ},
+}
+
+@InProceedings{son2019qtran,
+  title = 	 {{QTRAN}: Learning to Factorize with Transformation for Cooperative Multi-Agent Reinforcement Learning},
+  author =       {Son, Kyunghwan and Kim, Daewoo and Kang, Wan Ju and Hostallero, David Earl and Yi, Yung},
+  booktitle = 	 {Proceedings of the 36th International Conference on Machine Learning},
+  pages = 	 {5887--5896},
+  year = 	 {2019},
+  editor = 	 {Chaudhuri, Kamalika and Salakhutdinov, Ruslan},
+  volume = 	 {97},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {09--15 Jun},
+  publisher =    {PMLR},
+  pdf = 	 {http://proceedings.mlr.press/v97/son19a/son19a.pdf},
+  url = 	 {https://proceedings.mlr.press/v97/son19a.html},
+  abstract = 	 {We explore value-based solutions for multi-agent reinforcement learning (MARL) tasks in the centralized training with decentralized execution (CTDE) regime popularized recently. However, VDN and QMIX are representative examples that use the idea of factorization of the joint action-value function into individual ones for decentralized execution. VDN and QMIX address only a fraction of factorizable MARL tasks due to their structural constraint in factorization such as additivity and monotonicity. In this paper, we propose a new factorization method for MARL, QTRAN, which is free from such structural constraints and takes on a new approach to transforming the original joint action-value function into an easily factorizable one, with the same optimal actions. QTRAN guarantees more general factorization than VDN or QMIX, thus covering a much wider class of MARL tasks than does previous methods. Our experiments for the tasks of multi-domain Gaussian-squeeze and modified predator-prey demonstrate QTRAN’s superior performance with especially larger margins in games whose payoffs penalize non-cooperative behavior more aggressively.}
+}
+
+@inproceedings{wang2021qplex,
+  title={{\{}QPLEX{\}}: Duplex Dueling Multi-Agent Q-Learning},
+  author={Jianhao Wang and Zhizhou Ren and Terry Liu and Yang Yu and Chongjie Zhang},
+  booktitle={International Conference on Learning Representations},
+  year={2021},
+  url={https://openreview.net/forum?id=Rcmk0xxIQV}
+}
+
+@inproceedings{kuba2022happo,
+  title={Trust Region Policy Optimisation in Multi-Agent Reinforcement Learning},
+  author={Jakub Grudzien Kuba and Ruiqing Chen and Muning Wen and Ying Wen and Fanglei Sun and Jun Wang and Yaodong Yang},
+  booktitle={International Conference on Learning Representations},
+  year={2022},
+  url={https://openreview.net/forum?id=EcGGFkNTxdJ}
+}
+
+@inproceedings{peng2021facmac,
+  author = {Peng, Bei and Rashid, Tabish and de Witt, Christian A. Schroeder and Kamienny, Pierre-Alexandre and Torr, Philip H. S. and B\"{o}hmer, Wendelin and Whiteson, Shimon},
+  title = {FACMAC: factored multi-agent centralised policy gradients},
+  year = {2021},
+  isbn = {9781713845393},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {We propose FACtored Multi-Agent Centralised policy gradients (FACMAC), a new method for cooperative multi-agent reinforcement learning in both discrete and continuous action spaces. Like MADDPG, a popular multi-agent actor-critic method, our approach uses deep deterministic policy gradients to learn policies. However, FACMAC learns a centralised but factored critic, which combines per-agent utilities into the joint action-value function via a non-linear monotonic function, as in QMIX, a popular multi-agent Q-learning algorithm. However, unlike QMIX, there are no inherent constraints on factoring the critic. We thus also employ a nonmonotonic factorisation and empirically demonstrate that its increased representational capacity allows it to solve some tasks that cannot be solved with monolithic, or monotonically factored critics. In addition, FACMAC uses a centralised policy gradient estimator that optimises over the entire joint action space, rather than optimising over each agent's action space separately as in MADDPG. This allows for more coordinated policy changes and fully reaps the benefits of a centralised critic. We evaluate FACMAC on variants of the multi-agent particle environments, a novel multi-agent MuJoCo benchmark, and a challenging set of StarCraft II micromanagement tasks. Empirical results demonstrate FACMAC's superior performance over MADDPG and other baselines on all three domains.},
+  booktitle = {Proceedings of the 35th International Conference on Neural Information Processing Systems},
+  articleno = {934},
+  numpages = {14},
+  series = {NIPS '21}
+}
+
+@inproceedings{wen2022mat,
+  author = {Wen, Muning and Kuba, Jakub Grudzien and Lin, Runji and Zhang, Weinan and Wen, Ying and Wang, Jun and Yang, Yaodong},
+  title = {Multi-agent reinforcement learning is a sequence modeling problem},
+  year = {2022},
+  isbn = {9781713871088},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {Large sequence models (SM) such as GPT series and BERT have displayed outstanding performance and generalization capabilities in natural language process, vision and recently reinforcement learning. A natural follow-up question is how to abstract multi-agent decision making also as an sequence modeling problem and benefit from the prosperous development of the SMs. In this paper, we introduce a novel architecture named Multi-Agent Transformer (MAT) that effectively casts cooperative multi-agent reinforcement learning (MARL) into SM problems wherein the objective is to map agents' observation sequences to agents' optimal action sequences. Our goal is to build the bridge between MARL and SMs so that the modeling power of modern sequence models can be unleashed for MARL. Central to our MAT is an encoder-decoder architecture which leverages the multi-agent advantage decomposition theorem to transform the joint policy search problem into a sequential decision making process; this renders only linear time complexity for multiagent problems and, most importantly, endows MAT with monotonic performance improvement guarantee. Unlike prior arts such as Decision Transformer fit only pre-collected offline data, MAT is trained by online trial and error from the environment in an on-policy fashion. To validate MAT, we conduct extensive experiments on StarCraftII, Multi-Agent MuJoCo, Dexterous Hands Manipulation, and Google Research Football benchmarks. Results demonstrate that MAT achieves superior performance and data efficiency compared to strong baselines including MAPPO and HAPPO. Furthermore, we demonstrate that MAT is an excellent few-short learner on unseen tasks regardless of changes in the number of agents.},
+  booktitle = {Proceedings of the 36th International Conference on Neural Information Processing Systems},
+  articleno = {1201},
+  numpages = {13},
+  location = {New Orleans, LA, USA},
+  series = {NIPS '22}
+}
+
+@inproceedings{ellis2023smacv2,
+  author = {Ellis, Benjamin and Cook, Jonathan and Moalla, Skander and Samvelyan, Mikayel and Sun, Mingfei and Mahajan, Anuj and Foerster, Jakob N. and Whiteson, Shimon},
+  title = {SMACv2: an improved benchmark for cooperative multi-agent reinforcement learning},
+  year = {2023},
+  publisher = {Curran Associates Inc.},
+  address = {Red Hook, NY, USA},
+  abstract = {The availability of challenging benchmarks has played a key role in the recent progress of machine learning. In cooperative multi-agent reinforcement learning, the StarCraft Multi-Agent Challenge (SMAC) has become a popular testbed for the centralised training with decentralised execution paradigm. However, after years of sustained improvement on SMAC, algorithms now achieve near-perfect performance. In this work, we conduct new analysis demonstrating that SMAC lacks the stochasticity and partial observability to require complex closed-loop policies (i.e., those that condition on the observation). In particular, we show that an open-loop policy conditioned only on the timestep can achieve non-trivial win rates for many SMAC scenarios. To address this limitation, we introduce SMACv2, a new benchmark where scenarios are procedurally generated and require agents to generalise to previously unseen settings during evaluation. We show that these changes ensure the benchmark requires the use of closed-loop policies. We also introduce the extended partial observability challenge (EPO), which augments SMACv2 to ensure meaningful partial observability. We evaluate state-of-the-art algorithms on SMACv2 and show that it presents significant challenges not present in the original benchmark. Our analysis illustrates that SMACv2 addresses the discovered deficiencies of SMAC and can help benchmark the next generation of MARL methods. Videos of training are available on our website.},
+  booktitle = {Proceedings of the 37th International Conference on Neural Information Processing Systems},
+  articleno = {1634},
+  numpages = {27},
+  location = {New Orleans, LA, USA},
+  series = {NIPS '23}
+}
+
+@article{ding2024magi, 
+  title={Learning Efficient and Robust Multi-Agent Communication via Graph Information Bottleneck}, 
+  volume={38}, 
+  url={https://ojs.aaai.org/index.php/AAAI/article/view/29682}, 
+  DOI={10.1609/aaai.v38i16.29682}, 
+  abstractNote={Efficient communication learning among agents has been shown crucial for cooperative multi-agent reinforcement learning (MARL), as it can promote the action coordination of agents and ultimately improve performance. Graph neural network (GNN) provide a general paradigm for communication learning, which consider agents and communication channels as nodes and edges in a graph, with the action selection corresponding to node labeling. Under such paradigm, an agent aggregates information from neighbor agents, which can reduce uncertainty in local decision-making and induce implicit action coordination. However, this communication paradigm is vulnerable to adversarial attacks and noise, and how to learn robust and efficient communication under perturbations has largely not been studied. To this end, this paper introduces a novel Multi-Agent communication mechanism via Graph Information bottleneck (MAGI), which can optimally balance the robustness and expressiveness of the message representation learned by agents. This communication mechanism is aim at learning the minimal sufficient message representation for an agent by maximizing the mutual information (MI) between the message representation and the selected action, and simultaneously constraining the MI between the message representation and the agent feature. Empirical results demonstrate that MAGI is more robust and efficient than state-of-the-art GNN-based MARL methods.}, number={16}, journal={Proceedings of the AAAI Conference on Artificial Intelligence}, author={Ding, Shifei and Du, Wei and Ding, Ling and Guo, Lili and Zhang, Jian}, 
+  year={2024}, 
+  month={Mar.}, 
+  pages={17346–17353} 
+}
+
+@inproceedings{du2024ideal,
+  author = {Du, Wei and Ding, Shifei and Guo, Lili and Zhang, Jian and Ding, Ling},
+  title = {Expressive multi-agent communication via identity-aware learning},
+  year = {2024},
+  isbn = {978-1-57735-887-9},
+  publisher = {AAAI Press},
+  url = {https://doi.org/10.1609/aaai.v38i16.29683},
+  doi = {10.1609/aaai.v38i16.29683},
+  abstract = {Information sharing through communication is essential for tackling complex multi-agent reinforcement learning tasks. Many existing multi-agent communication protocols can be viewed as instances of message passing graph neural networks (GNNs). However, due to the significantly limited expressive ability of the standard GNN method, the agent feature representations remain similar and indistinguishable even though the agents have different neighborhood structures. This further results in the homogenization of agent behaviors and reduces the capability to solve tasks effectively. In this paper, we propose a multi-agent communication protocol via identity-aware learning (IDEAL), which explicitly enhances the distinguishability of agent feature representations to break the diversity bottleneck. Specifically. IDEAL extends existing multi-agent communication protocols by inductively considering the agents' identities during the message passing process. To obtain expressive feature representations for a given agent. IDEAL first extracts the ego network centered around that agent and then performs multiple rounds of heterogeneous message passing, where different parameter sets are applied to the central agent and the other surrounding agents within the ego network. IDEAL fosters more expressive communication between agents and generates more distinguishable feature representations, which promotes action diversity and individuality emergence. Experimental results on various benchmarks demonstrate IDEAL can be flexibly integrated into various multi-agent communication methods and enhances the corresponding performance.},
+  booktitle = {Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence and Thirty-Sixth Conference on Innovative Applications of Artificial Intelligence and Fourteenth Symposium on Educational Advances in Artificial Intelligence},
+  articleno = {1935},
+  numpages = {8},
+  series = {AAAI'24/IAAI'24/EAAI'24}
+}
+
+@inproceedings{du2024scic,
+  author = {Du, Xiao and Ye, Yutong and Zhang, Pengyu and Yang, Yaning and Chen, Mingsong and Wang, Ting},
+  title = {Situation-dependent causal influence-based cooperative multi-agent reinforcement learning},
+  year = {2024},
+  isbn = {978-1-57735-887-9},
+  publisher = {AAAI Press},
+  url = {https://doi.org/10.1609/aaai.v38i16.29684},
+  doi = {10.1609/aaai.v38i16.29684},
+  abstract = {Learning to collaborate has witnessed significant progress in multi-agent reinforcement learning (MARL). However, promoting coordination among agents and enhancing exploration capabilities remain challenges. In multi-agent environments, interactions between agents are limited in specific situations. Effective collaboration between agents thus requires a nuanced understanding of when and how agents' actions influence others. To this end, in this paper, we propose a novel MARL algorithm named Situation-Dependent Causal Influence-Based Cooperative Multi-agent Reinforcement Learning (SCIC), which incorporates a novel Intrinsic reward mechanism based on a new cooperation criterion measured by situation-dependent causal influence among agents. Our approach aims to detect inter-agent causal influences in specific situations based on the criterion using causal intervention and conditional mutual information (CMI). This effectively assists agents in exploring states that can positively impact other agents, thus promoting cooperation between agents. The resulting update links coordinated exploration and intrinsic reward distribution, which enhance overall collaboration and performance. Experimental results on various MARL benchmarks demonstrate the superiority of our method compared to state-of-the-art approaches.},
+  booktitle = {Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence and Thirty-Sixth Conference on Innovative Applications of Artificial Intelligence and Fourteenth Symposium on Educational Advances in Artificial Intelligence},
+  articleno = {1936},
+  numpages = {9},
+  series = {AAAI'24/IAAI'24/EAAI'24}
 }

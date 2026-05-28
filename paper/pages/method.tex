@@ -40,7 +40,7 @@ V_{\phi}(x^t) = f_{V}(x^t).
 \end{equation}
 在实际实现中，$x^t$ 可由全局状态、联合观测或经过拼接的集中式特征构成。该设计的目的在于缓解部分可观测与多智能体策略耦合带来的估值困难，这也是 CTDE 框架中常见的稳定化做法\cite{foerster2018coma,lowe2017maddpg,yu2021mappo}。
 
-基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数\cite{DBLP:journals/corr/SchulmanMLJA15}，并在后续策略优化中使用该优势估计提供更平滑的策略梯度信号。
+基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数\cite{Schulman2015HighDimensionalCC}，并在后续策略优化中使用该优势估计提供更平滑的策略梯度信号。
 
 \subsection{MAPPO 优化目标}
 \esubsection{MAPPO Objective}
@@ -54,9 +54,9 @@ L_{\text{policy}}
 \end{equation}
 其中 $c_e$ 与 $c_v$ 分别为熵系数和价值损失系数。更具体的 PPO 裁剪形式与 GAE 展开采用标准实现，不在此重复推导。
 
-在实现层面，本文还引入了 active masks、proper time-limit、线性学习率衰减以及基于近似 KL 的 early stop 机制，从而显著增强了主干训练的稳定性。
+在实现层面，本文还引入了有效样本掩码（active masks）、规范时间截断处理（proper time-limit）、线性学习率衰减以及基于近似 KL 的提前停止机制（early stop），从而显著增强了主干训练的稳定性。
 
-本文将 MAPPO 作为协作决策主干，核心原因正在于上述优化目标与本文通信问题高度匹配\cite{yu2021mappo,schulman2017ppo}。一方面，集中式价值评估器与分布式策略网络的组合能够同时兼顾训练期协作估值和执行期局部决策，适合作为“局部观测决策 + 有限通信修正”的基础结构；另一方面，PPO 截断、价值裁剪以及一系列稳定化技巧能够有效抑制策略更新过快带来的震荡，使通信分支可以附着在相对平稳的主干策略上学习。由于本文后续通信模块都通过动作层残差直接修正 logits，主干越稳定，通信效应就越容易被隔离、比较和解释。因此，MAPPO 在本文中不仅是一个性能较强的基线方法，更是支撑后续“通信如何作用于动作决策”分析的统一优化底座。
+本文将 MAPPO 作为协作决策主干，核心原因正在于上述优化目标与本文通信问题高度匹配\cite{yu2021mappo,schulman2017ppo}。一方面，集中式价值评估器与分布式策略网络的组合能够同时兼顾训练期协作估值和执行期局部决策，适合作为“局部观测决策 + 有限通信修正”的基础结构；另一方面，PPO 截断、价值裁剪以及一系列稳定化技巧能够有效抑制策略更新过快带来的震荡，使通信分支可以附着在相对平稳的主干策略上学习。近年来，无论是 trust-region 风格的多智能体策略优化方法\cite{kuba2022happo}，还是将集中式策略梯度与分解式 Critic 结合的 FACMAC\cite{peng2021facmac}，抑或将协作决策重写为序列建模问题的 MAT\cite{wen2022mat}，都进一步说明“强而稳定的主干”对于后续协同增强模块的重要性。由于本文后续通信模块都通过动作层残差直接修正 logits，主干越稳定，通信效应就越容易被隔离、比较和解释。因此，MAPPO 在本文中不仅是一个性能较强的基线方法，更是支撑后续“通信如何作用于动作决策”分析的统一优化底座。
 
 \section{统一通信建模框架}
 \esection{Unified Communication Modeling Framework}
@@ -100,7 +100,7 @@ m_i^t=\sum_{j \in \mathcal{N}_i^t}\alpha_{ij}^t v_j^t.
 \subsection{残差式融合}
 \esubsection{Residual Fusion}
 
-为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路\cite{He_2016_CVPR}。设 $\operatorname{LN}(\cdot)$ 表示层归一化\cite{DBLP:journals/corr/BaKH16}，$[\cdot,\cdot]$ 表示向量拼接，通信修正量 $\Delta_i^t$ 与门控 $g_i^t$ 共同由 $[h_i^t,\operatorname{LN}(m_i^t)]$ 决定，最终动作 logits 为
+为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路\cite{He_2016_CVPR}。设 $\operatorname{LN}(\cdot)$ 表示层归一化\cite{Ba2016LayerN}，$[\cdot,\cdot]$ 表示向量拼接，通信修正量 $\Delta_i^t$ 与门控 $g_i^t$ 共同由 $[h_i^t,\operatorname{LN}(m_i^t)]$ 决定，最终动作 logits 为
 \begin{equation}
 \tilde{\ell}_i^t
 =
