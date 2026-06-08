@@ -25,11 +25,39 @@
 % The Current Maintainer of this work is Aetf.
 %
 
-\xjtuappendixchapter{补充实验材料}
-\xjtuappendixechapter{Supplementary Experimental Materials}
+\xjtuappendixchapter{外文原文}
 
-\setcounter{section}{0}
-\setcounter{subsection}{0}
+\vspace{-1.0\baselineskip}
+\begin{center}
+    \makebox[\textwidth][c]{%
+        \includegraphics[
+            page=1,
+            width=1.12\textwidth,
+            height=0.94\textheight,
+            keepaspectratio
+        ]{AAAI_2025_通信.pdf}%
+    }
+\end{center}
+\clearpage
+
+\includepdf[
+    pages=2-7,
+    scale=1.0,
+    pagecommand={\thispagestyle{plain}}
+]{AAAI_2025_通信.pdf}
+\clearpage
+
+\xjtuappendixchapter{外文译文}
+
+\titleformat{\section}[hang]{\xiaosan}{}{0em}{}[]
+\titlespacing*{\section}{0em}{1.0\baselineskip}{0.6\baselineskip}
+\titleformat{\subsection}{\sihao}{}{0em}{}[]
+\titlespacing*{\subsection}{0em}{0.9\baselineskip}{0.5\baselineskip}
+
+\input{pages/aaai2025_translation.tex}
+
+\xjtuappendixchapter{补充实验材料}
+
 \titleformat{\section}[hang]{\xiaosan}{}{0em}{\thesection\quad}[]
 \titlespacing*{\section}{0em}{1.0\baselineskip}{0.6\baselineskip}
 \titleformat{\subsection}{\sihao}{}{0em}{\thesubsection\quad}[]
@@ -311,9 +339,7 @@ M_{i,\text{adv}}^t
 \sum_{t,i} M_{i,\text{adv}}^t + \epsilon
 }.
 \end{equation}
-该损失只在正优势攻击样本上施加约束，
-其作用不是直接重写攻击目标，
-而是要求通信残差至少能够沿有利动作方向稳定触达攻击 logits。
+该损失只在正优势攻击样本上施加约束。
 
 \xjtuappendixsubsection{队友冲突边际损失与不确定性融合加权}
 
@@ -482,31 +508,3 @@ c_{i,\text{local}}^t
 若 \(\bar{c}_{\text{local,w}}\) 显著低于未加权的本地置信度均值，
 则说明最终融合路径确实更偏向那些本地策略自身不够确定的状态，
 而不是对所有状态无差别地提高通信介入力度。
-
-\xjtuappendixsection{代表性主线的核心代码摘录}
-
-考虑到完整实现文件同时包含大量输入解析、参数搬运、日志封装与诊断分支，
-本节不再附上可直接运行的工程源码，
-而是给出一份与正文机制一一对应的研究型代码摘录。
-该摘录仅保留双流通信模块、动作层残差介入、攻击意图对齐以及队友冲突边际修正，
-用于说明本文方法在实现层面的核心结构。
-
-\xjtuappendixsubsection{双流动作层介入主线的核心实现}
-
-{\lstset{
-    language=Python,
-    basicstyle=\ttfamily\scriptsize,
-    columns=fullflexible,
-    keepspaces=true,
-    breaklines=true,
-    breakatwhitespace=false,
-    showstringspaces=false,
-    frame=none,
-    numbers=none,
-    xleftmargin=0pt,
-    framexleftmargin=0pt,
-    aboveskip=0.8\baselineskip,
-    belowskip=0.4\baselineskip
-}
-\lstinputlisting{figures/generated/appendix_agent_core_excerpt.py}
-}

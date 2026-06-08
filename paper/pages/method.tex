@@ -40,7 +40,7 @@ V_{\phi}(x^t) = f_{V}(x^t).
 \end{equation}
 在实际实现中，$x^t$ 可由全局状态、联合观测或经过拼接的集中式特征构成。该设计的目的在于缓解部分可观测与多智能体策略耦合带来的估值困难，这也是 CTDE 框架中常见的稳定化做法\cite{foerster2018coma,lowe2017maddpg,yu2021mappo}。
 
-基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数\cite{Schulman2015HighDimensionalCC}，并在后续策略优化中使用该优势估计提供更平滑的策略梯度信号。
+基于 Critic 输出，本文采用广义优势估计（GAE）构造优势函数，并在后续策略优化中使用该优势估计提供更平滑的策略梯度信号。
 
 \subsection{MAPPO 优化目标}
 \esubsection{MAPPO Objective}
@@ -100,7 +100,7 @@ m_i^t=\sum_{j \in \mathcal{N}_i^t}\alpha_{ij}^t v_j^t.
 \subsection{残差式融合}
 \esubsection{Residual Fusion}
 
-为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路\cite{He_2016_CVPR}。设 $\operatorname{LN}(\cdot)$ 表示层归一化\cite{Ba2016LayerN}，$[\cdot,\cdot]$ 表示向量拼接，通信修正量 $\Delta_i^t$ 与门控 $g_i^t$ 共同由 $[h_i^t,\operatorname{LN}(m_i^t)]$ 决定，最终动作 logits 为
+为避免通信分支淹没局部观测特征，本文统一采用残差式融合思路。设 $\operatorname{LN}(\cdot)$ 表示层归一化，$[\cdot,\cdot]$ 表示向量拼接，通信修正量 $\Delta_i^t$ 与门控 $g_i^t$ 共同由 $[h_i^t,\operatorname{LN}(m_i^t)]$ 决定，最终动作 logits 为
 \begin{equation}
 \tilde{\ell}_i^t
 =

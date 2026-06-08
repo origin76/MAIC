@@ -1,0 +1,426 @@
+% This file is generated from AAAI_2025_通信_中文翻译.md.
+% Regenerate it if the Markdown translation is edited.
+
+\begin{center}
+{\sanhao\bfseries 多智能体强化学习中的高效通信：基于隐式共识生成}
+\end{center}
+
+\section*{摘要}
+
+多智能体协作任务中的一个关键挑战，是降低对队友状态与信息的不确定性，以提升协作表现。显式通信方法能够减少这种不确定性，但其通信开销较高，限制了实际可用性。相比之下，隐式共识学习不引入额外通信成本，也能促进协作；但当局部观测受限较严重时，其性能会明显下降。本文提出一种新的多智能体学习框架，结合了上述两类方法的优势。在该框架中，智能体先基于局部观测生成团队共识，再将共识与局部观测共同用于消息生成。由于共识提供了一定的全局指导，在非必要时可关闭通信以降低开销；在必要时通信又可为共识补充信息。实验结果表明，本文方法在保证高效协作的同时，显著降低了智能体间通信开销。
+
+\section*{引言}
+
+近年来，多智能体强化学习（MARL）受到广泛关注，应用场景涵盖视频游戏、能源网络、机器人控制等。许多 MARL 算法采用集中训练、分散执行（CTDE）范式，以应对多智能体环境中的非平稳性并提升可扩展性。然而在执行阶段，智能体只能访问局部观测，导致其对队友状态和信息存在较大不确定性，进而产生协作失调与次优策略。
+
+为解决该问题，一类方法引入显式通信，让智能体交换观测或特征表示，并利用接收消息增强策略学习。此类方法能有效降低不确定性并提升协作性能，但高通信成本限制了其实用性，尤其是在带宽和实时性约束严格的场景。此外，过量通信还可能引入冗余甚至有害信息，影响训练收敛。因此，如何降低通信成本并发送高效消息成为一个值得研究的问题。
+
+另一类方法是隐式共识协作（Xu et al. 2023; Ruan et al. 2023; Pagello et al. 1999）：各智能体仅基于局部观测推断一致共识，从而形成对环境和群体的共同理解，在无额外通信成本下实现更好的协作。但该类方法的不足在于，当不同智能体观测差异较大时，复杂共识较难形成；且过度依赖共识还可能导致策略多样性不足。此外，仅依赖局部观测往往使智能体之间难以达成更复杂的共识。
+
+以上两类方法各有优点，但多数现有工作将二者割裂处理，未充分利用其互补性。本文提出 COCOM（\textbf{CO}nsensus-based \textbf{COM}munication）框架：每个智能体先分散式推断共识，再结合共识与局部观测生成消息。整体过程分为两个部分：
+
+\begin{enumerate}
+    \item 共识生成：设计与 CTDE 匹配的共识学习机制。执行时由局部信息生成局部共识；训练时利用全局信息生成全局共识，并用其指导局部共识，使多智能体共识具备一致性与意义。
+    \item 消息生成：基于局部共识与局部观测生成消息并广播。由于队友共享共识，消息应携带超出共识的补充信息。本文使用互信息约束鼓励“有增量”的消息，并通过门控机制决定是否发送。
+\end{enumerate}
+
+二者相互促进：消息模块补齐共识缺失的信息，共识模块在通信不可用时继续提供协作指导。
+
+本文在 Hallway、SMAC、GRF 等多种场景上评估 COCOM。结果表明：COCOM 在更低通信开销下实现更优性能，并可迁移到多种现有框架中提升原算法表现。
+
+本文贡献如下：
+
+\begin{enumerate}
+    \item 提出结合显式通信与隐式协同的多智能体协作算法，使智能体能够推断有意义共识并生成差异化消息，提升群体协作能力。
+    \item 设计高效通信机制：通过基于共识与消息的门控过滤通信；并引入基于交叉注意力的消息处理模块，以处理可变数量队友消息。
+    \item 在多种协作基准环境上进行大量实验，验证 COCOM 在降低通信开销的同时显著提升协作性能。
+\end{enumerate}
+
+\section*{显式通信协同}
+
+为缓解部分可观测性对协作的影响，显式通信方法在多智能体系统中被广泛采用。主流方法通常学习端到端可微通信通道。典型工作包括：
+
+\begin{itemize}
+    \item CommNet：对所有智能体隐藏层输出做平均作为补充信息，但忽略个体差异；
+    \item DAIL：广播离散消息并端到端优化，但离散消息表达能力受限；
+    \item MASIA、TarMAC：借助注意力机制从大量冗余消息中提取关键信息；
+    \item CAMA：引入全局教练与通信形成互补机制。
+\end{itemize}
+
+为降低通信成本，也有方法进行通信筛选：
+
+\begin{itemize}
+    \item VBC：基于局部决策置信度决定是否通信，但请求-响应机制影响实时性；
+    \item TMC：利用时序局部性降低开销并提高抗噪性，但增加缓冲存储负担；
+    \item CACOM：在受限带宽下通过两轮通信生成个性化消息；
+    \item NDQ、MAIC：使用变分推断与正则惩罚压缩或定制消息；
+    \item ATOC、I2CNet、Gated-ACML：学习门控通信模式，但缺少全局协调，且忽略了队友已知信息。
+\end{itemize}
+
+总体而言，现有显式通信方法常受高开销限制，难以在真实应用中部署。即使通过关闭部分通信降低开销，也往往会带来训练不稳定问题。
+
+\section*{隐式共识协同}
+
+社会科学研究指出，人类群体协作中常形成隐式共识。受此启发，MARL 近年来也出现了一系列共识学习工作。典型方法包括：
+
+\begin{itemize}
+    \item COLA：利用不变视角特性通过对比学习生成离散共享共识，但其生成的共识过于简单；
+    \item CoS：通过分组与向量化 VAE 抽取组级嵌入共识；
+    \item TACO：用显式通信指导隐式协作，并逐步过渡到无通信范式；
+    \item MACKRL：通过层级策略树构建共同知识；
+    \item NCC-MARL：引入邻域一致性以保证认知对齐。
+\end{itemize}
+
+尽管这类方法提升了实用性，但在复杂动态场景中，仅依赖局部感知来形成稳定且复杂的团队共识往往不够可靠。
+
+为克服上述局限，COCOM 将显式通信与隐式共识自然结合，在有效性与实用性之间取得平衡。
+
+\section*{背景}
+
+\subsection*{分散式部分可观测马尔可夫决策过程（Dec-POMDP）}
+
+本文考虑全合作多智能体问题，将其建模为 Dec-POMDP：
+
+\[
+G=\langle S,U,N,\Omega,T,O,r,\gamma\rangle,
+\]
+
+其中，$s\in S$ 为环境全局状态。每个离散时间步 $t$，智能体 $i\in N:=\{1,\ldots,n\}$ 根据观测函数 $O(s,i):S\times N\to\Omega$ 获得局部观测 $o_i\in\Omega$，并选择动作 $u_i\in U_i$。联合动作 $u=\{u_1,\ldots,u_n\}\in U\equiv U^n$ 通过状态转移函数 $T(s^{\prime}\mid s,u):S\times U\times S\to P(S)$ 产生下一状态 $s^{\prime}$。$r_i(s,u_i):S\times U_i\to\mathbb{R}$ 为各智能体奖励函数；在 Dec-POMDP 中各智能体共享奖励 $r(s,u):S\times U\to\mathbb{R}$。$\gamma$ 为折扣因子。
+
+目标是学习联合策略 $\pi(\tau,u)$，最大化全局价值函数：
+
+\[
+Q_{\text{tot}}(\tau,u)=\mathbb{E}_{s,u}\!\left[\sum_{t=0}^{\infty}\gamma^t r(s,u)\,\mid dle\mid \,s,u,\pi\right].
+\]
+
+其中 $\tau=\langle\tau_1,\ldots,\tau_n\rangle$ 为联合历史表示，$\tau_i$ 为智能体 $i$ 在时刻 $t$ 的历史 $(o_i^1,u_i^1,\ldots,o_i^{t-1},u_i^{t-1},o_i^t)$。
+
+\subsection*{集中训练与分散执行（CTDE）}
+
+在 CTDE 中，训练时可使用全局信息，执行时仅依赖局部观测。值分解（VD）方法以混合网络将个体效用 $Q_i$ 组合拟合全局动作价值 $Q_{\text{tot}}$。多数 VD 方法遵循 IGM（Individual-Global-Max）假设：
+
+\begin{equation}
+\arg\max_{u}Q_{\text{tot}}(\tau,u)
+=
+\left(
+\arg\max_{u_1}Q_1(\tau_1,u_1),\ldots,\arg\max_{u_n}Q_n(\tau_n,u_n)
+\right).
+\tag{1}
+\end{equation}
+
+动作价值通过最小化 TD 误差进行训练：
+
+\begin{equation}
+L_{\text{TD}}=\left(y_{\text{tot}}-Q_{\text{tot}}(\tau,u)\right),
+\tag{2}
+\end{equation}
+
+其中
+
+\[
+y_{\text{tot}}=r+\gamma\max_{u^{\prime}}\hat{Q}_{\text{tot}}(\tau^{\prime},u^{\prime}),
+\]
+
+$\hat{Q}_{\text{tot}}$ 为目标网络。
+
+\section*{方法}
+
+COCOM 融合显式通信与隐式共识。参考 QMIX，本文采用 MLP 和 GRU 从局部观测 $o_i^t$ 与上一时刻动作 $u_i^{t-1}$ 中提取历史表示 $\tau_i^t$。核心组件包括：
+
+\begin{enumerate}
+    \item 局部/全局共识生成器；
+    \item 消息生成器；
+    \item 用于接收消息的交叉注意力模块。
+\end{enumerate}
+
+COCOM 遵循 CTDE 设计，可作为通用模块集成到已有 CTDE 算法中。
+
+\subsection*{隐式共识学习}
+
+\begin{center}
+\includegraphics[width=0.92\textwidth,keepaspectratio]{figures_from_AAAI_2025_通信/fig1.png}
+\\[-0.2em]
+{\wuhao 图1：COCOM 总体框架（对应论文 Figure 1）。}
+\end{center}
+
+共识问题的核心目标是让智能体形成一致的共识值。设 $c_i$ 为智能体 $i$ 的共识，则团队达成共识意味着对任意 $j\neq i$，当 $t\to\infty$ 时满足 $\|c_i-c_j\|\to 0$。
+
+为支持分散执行，共识需由局部信息生成。已有方法常通过成对对齐局部共识来最小化差异，但可能导致共识塌缩（即在观测不同情况下仍输出同一“无信息”共识）。为避免该问题，COCOM 额外引入全局共识生成器（编码器-解码器结构）：
+
+\begin{itemize}
+    \item 编码器输入全局状态与联合动作，输出全局共识分布 $q(c_t\mid s_t,u^t)$；
+    \item 全局共识建模为多元高斯，由 MLP 计算并采样得到 $c_t$；
+    \item 解码器（MLP）根据采样共识重建联合动作与全局状态。
+\end{itemize}
+
+该过程遵循标准 VAE，优化两项损失：
+
+\begin{equation}
+L_{\text{KL}}^{\text{prior}}
+=
+D_{\text{KL}}\!\left(q(c_t\mid s_t,u^t)\,\|\,\tilde p(\cdot)\right),
+\tag{3}
+\end{equation}
+
+\begin{equation}
+L_{\text{rec}}
+=
+\text{CROSS\_ENTROPY}(u^t,\hat u^t)+\text{MSE}(s^t,\hat s^t).
+\tag{4}
+\end{equation}
+
+其中 $\tilde p(\cdot)=\mathcal{N}(0,I)$。第一项约束后验与先验一致，第二项最小化重建误差。参数通过重参数化技巧优化。通过可重建的全局共识，生成的共识语义更充分、更有用。
+
+局部共识生成器结构与全局共识编码器相似，但输入为 $\tau_i^t$，输出局部分布 $q(\hat c_i^t\mid \tau_i^t)$。不同于成对对齐，本文将各智能体局部共识对齐到同一时刻全局共识：
+
+\begin{equation}
+L_{\text{KL}}
+=
+\sum_{i=1}^{n}
+D_{\text{KL}}\!\left(q(c_t\mid s_t,u^t)\,\|\,q(\hat c_i^t\mid \tau_i^t)\right).
+\tag{5}
+\end{equation}
+
+全局共识生成器仅在训练时使用；执行时仅依赖局部信息生成局部共识，因此可分散部署。共识学习总损失为：
+
+\begin{equation}
+L_{\text{Cons}}=L_{\text{rec}}+L_{\text{KL}}^{\text{prior}}+L_{\text{KL}}.
+\tag{6}
+\end{equation}
+
+\subsection*{基于共识的通信学习}
+
+由于共识反映团队共同认知，消息应在“已知共识”前提下提供增量信息。为此，消息生成器将局部共识与隐藏状态拼接作为输入，经 MLP 输出消息分布 $q(m_i^t\mid \tau_i^t,\hat c_i^t)$，采样得到消息 $m_i^t$ 并广播。
+
+为使消息简洁且有效，本文从两个角度优化：
+
+\begin{enumerate}
+    \item 消息不应重复共识中已有信息；
+    \item 消息应减少队友动作决策不确定性。
+\end{enumerate}
+
+对应互信息目标为：
+
+\begin{equation}
+I_{\text{Msg}}
+=
+I(m_i;\hat c_i\mid \tau_i)-I(m_i;u_j\mid \tau_i,\hat c_i).
+\tag{7}
+\end{equation}
+
+最小化 $I(m_i;\hat c_i\mid \tau_i)$ 能减少与共识冗余；最大化 $I(m_i;u_j\mid \tau_i,\hat c_i)$ 能提升对队友决策的有效性。
+
+首先，对第一项采用 Conditional-CLUB 最小化其上界：
+
+\begin{equation}
+I(m_i;\hat c_i\mid \tau_i)\le L_{I_1}^{K}
+=
+\frac{1}{K}\sum_{k=1}^{K}\log p(m_i^{k}\mid \tau_i^{k},\hat c_i^{k})
+-\frac{1}{K}\sum_{k=1}^{K}\log p(m_i^{k}\mid \tau_i^{k},\hat c_i^{k^{\prime}}),
+\tag{8}
+\end{equation}
+
+其中 $K$ 为 mini-batch 样本数，$k^{\prime}$ 从 $\{1,2,\ldots,K\}$ 中均匀采样。
+
+其次，对第二项有：
+
+\begin{equation}
+I(m_i,u_j\mid \tau_i,\hat c_i)
+=
+H(m_i\mid \tau_i,\hat c_i)-H(m_i\mid \tau_i,\hat c_i,u_j).
+\tag{9}
+\end{equation}
+
+最大化该项等价于在给定本地信息与共识后，最小化队友接收消息后的决策不确定性。使用变分分布 $q_{\zeta}(m_i\mid \tau_i,u_j,\hat c_i)$ 近似，可得下界：
+
+\begin{equation}
+I(m_i,u_j\mid \tau_i,\hat c_i)\ge -L_{I_2}
+=
+-D_{\text{KL}}\!\left(p(m_i\mid \tau_i,\hat c_i)\,\|\,q_{\zeta}(m_i\mid \tau_i,u_j,\hat c_i)\right).
+\tag{10}
+\end{equation}
+
+消息互信息优化损失为：
+
+\begin{equation}
+L_{\text{Msg}}=L_{I_1}+L_{I_2}.
+\tag{11}
+\end{equation}
+
+\subsection*{基于门控机制的消息裁剪}
+
+考虑到智能体在部分时刻仅依赖共识与局部观测也可做出合理决策，本文引入门控机制裁剪不必要通信。门控输入为智能体 $i$ 的共识与生成消息：
+
+\begin{equation}
+p_g=\text{softmax}\!\big(f_g(m_i,c_i)\big)=(p_{\text{close}},p_{\text{open}}),
+\tag{12}
+\end{equation}
+
+其中 $f_g$ 为全连接门控网络。根据 $p_{\text{open}}$ 与 $p_{\text{close}}$ 比较确定门状态：
+
+\begin{equation}
+g_i=\mathbf{1}[p_{\text{open}}>p_{\text{close}}],
+\tag{13}
+\end{equation}
+
+若 $g_i=1$，智能体 $i$ 广播消息，否则保持静默。
+
+由于指示函数不可导，门控无法直接端到端训练。为此引入辅助监督任务，构造伪标签，保留“有价值”的通信：仅当发送消息能提升队友所选动作的期望回报时才允许发送：
+
+\begin{equation}
+y_i=
+\mathbf{1}\!\left[
+\frac{1}{n-1}\sum_{j\ne i}
+\left(
+\left.\arg\max_{u_j}Q_j(\tau_j,u_j)\right|_{g_i=1}
+-
+\left.\arg\max_{u_j}Q_j(\tau_j,u_j)\right|_{g_i=0}
+\right)>\sigma
+\right].
+\tag{14}
+\end{equation}
+
+并用交叉熵训练门控：
+
+\[
+L_g=\text{CROSS\_ENTROPY}\!\left(y_i,f_g(m_i,c_i)\right).
+\]
+
+\subsection*{消息接收模块}
+
+每个时间步，智能体接收的消息数量不固定。为适配该变长输入，本文采用交叉注意力作为消息接收模块，并通过注意力聚焦关键消息。智能体 $i$ 根据历史信息 $\tau_i$ 与接收消息计算注意力权重，得到融合消息表示：
+
+\begin{equation}
+\tilde m_i=\text{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right)V,\quad \forall g_j=1.
+\tag{15}
+\end{equation}
+
+其中
+
+\[
+Q=h_iW_Q,\quad K=m_jW_K,\quad V=m_jW_V,
+\]
+
+$W_Q,W_K,W_V$ 为可学习矩阵，$d_k$ 为 $W_K$ 的维度。并采用多头注意力增强消息提取多样性。若某时刻未接收任何消息，则 $\tilde m_i$ 置零向量。
+
+\subsection*{总体学习目标}
+
+为充分利用已知信息，个体效用网络 $Q_i$ 的输入由接收消息 $\tilde m_i$、历史表示 $\tau_i$ 与局部共识 $\hat c_i$ 拼接得到。强化学习部分沿用值分解框架，使用式（2）的 $L_{\text{TD}}$ 训练策略。
+
+整体优化由四部分组成：
+
+\begin{enumerate}
+    \item 强化学习 TD 损失 $L_{\text{TD}}$；
+    \item 共识生成损失 $L_{\text{Cons}}$；
+    \item 消息生成互信息损失 $L_{\text{Msg}}$；
+    \item 门控学习交叉熵损失 $L_g$。
+\end{enumerate}
+
+总损失为：
+
+\begin{equation}
+L_{\text{tot}}=L_{\text{TD}}+L_{\text{Cons}}+L_{\text{Msg}}+L_g.
+\tag{16}
+\end{equation}
+
+\section*{实验}
+
+本文通过实验回答三个问题：
+
+\begin{enumerate}
+    \item COCOM 能否在保持性能的同时有效降低通信成本？
+    \item COCOM 学到了怎样的通信模式？
+    \item COCOM 能否与不同值分解基线结合并提升性能？
+\end{enumerate}
+
+对比方法包括：
+
+\begin{itemize}
+    \item 无通信基线：QMIX、VDN；
+    \item 仅隐式共识：COLA；
+    \item 不考虑通信成本：Full-Comm、TarMAC；
+    \item 具有通信筛选机制的 SOTA：NDQ、MAIC、TMC。
+\end{itemize}
+
+基线超参数采用 PyMARL2 的调优配置。实验环境为 Hallway、SMAC、GRF。所有曲线均报告 5 个随机种子的平均性能与 25\% 到 75\% 分位区间，实线为平均胜率。
+
+\subsection*{Hallway 场景结果}
+
+Hallway 是三智能体协作任务，三条路径长度分别为 $j,k,l$。每个智能体仅观测当前位置，动作可选左移、右移或停留。当任一智能体到达目标即回合结束；仅当所有智能体同时到达目标点时给出 +10 奖励。文中设置 $j=2,k=6,l=10$。由于智能体无法观测队友位置，有效通信至关重要。
+
+\begin{center}
+\includegraphics[width=0.92\textwidth,keepaspectratio]{figures_from_AAAI_2025_通信/fig2.png}
+\\[-0.2em]
+{\wuhao 图2：Hallway 地图、性能对比与通信开销（对应论文 Figure 2）。}
+\end{center}
+
+实验结果显示：
+
+\begin{itemize}
+    \item 无通信的 QMIX 表现最差；
+    \item 仅依赖局部共识的 COLA 也较弱；
+    \item Full-Comm 整体较好，但因不过滤消息，冗余信息干扰学习效率；
+    \item 其他通信算法常因过度裁剪而在消息受抑制时缺少替代性引导，导致训练不稳；
+    \item COCOM 在无通信时可依赖共识决策，在关键时刻再通信，因此兼顾性能与低开销。
+\end{itemize}
+
+\subsection*{Hallway 可视化分析}
+
+\begin{center}
+\includegraphics[width=0.92\textwidth,keepaspectratio]{figures_from_AAAI_2025_通信/fig3.png}
+\\[-0.2em]
+{\wuhao 图3：Hallway 场景中的门控通信时序可视化（对应论文 Figure 3）。}
+\end{center}
+
+对 Hallway 的完整回合可视化（如图3所示）表明：图的上半部分展示各时刻智能体的位置，下半部分展示三个智能体（a、b、c）消息门的开关状态。智能体 a、b、c 分别初始化于位置 a2、b3、c4。在前期，智能体可在共识引导下同步向目标移动，无需显式通信；到达目标附近后才开启通信门控。在最后时刻，通过显式通信，所有智能体确认队友可以接近目标并同步抵达，成功完成任务。这说明 COCOM 学到了”关键时刻通信”的有效策略。
+
+\subsection*{SMAC 场景结果}
+
+SMAC 为基于 StarCraft 的多智能体微操环境，包含不同难度任务。本文测试 6 个场景：4 个简单场景（\texttt{2s3z}、\texttt{3s5z}、\texttt{1c3s5z}、\texttt{10m\_vs\_11m}），1 个困难场景（\texttt{2c\_vs\_64zg}），1 个超困难场景（\texttt{MMM2}），版本为 SC2.4.10。
+
+\begin{center}
+\includegraphics[width=0.92\textwidth,keepaspectratio]{figures_from_AAAI_2025_通信/fig4.png}
+\\[-0.2em]
+{\wuhao 图4：SMAC 基准上的性能对比（对应论文 Figure 4）。}
+\end{center}
+
+与 Hallway 不同，SMAC 中智能体可观测部分队友信息。像 Full-Comm 这类不过滤消息的方法可能分散智能体的注意力并降低性能。COCOM 利用共识对消息进行提炼和筛选，在多个 SMAC 地图上均优于现有通信与共识方法，说明共识模块与通信模块可相互增益。
+
+\subsection*{通信开销分析}
+
+比较 COCOM、MAIC、TMC 在不同场景的通信成本。采用与既有工作一致的统计方式，计算每回合平均通信对数：
+
+\[
+\frac{\sum_{t=0}^{T}x_t}{ZT},
+\]
+
+其中 $x_t$ 为时刻 $t$ 的通信智能体对数量，$Z$ 为智能体对总数。
+
+结果显示 COCOM 具有自适应通信特性：
+
+\begin{itemize}
+    \item 在通信需求较低的 SMAC 场景（\texttt{2c\_vs\_64zg}、\texttt{10m\_vs\_11m}）中，COCOM 通信开销最低；
+    \item 在队友不可见的 Hallway 场景中，COCOM 维持“足以完成任务”的通信水平；
+    \item MAIC 因缺乏可替代通信消息的信号，开销最高；
+    \item TMC 在不同场景按近似比例压缩通信，导致 Hallway 中压缩过度，任务难以完成。
+\end{itemize}
+
+\subsection*{GRF 场景结果}
+
+Google Research Football（GRF）是多智能体足球协作平台。本文在 \texttt{academy 3 vs 1 with keeper} 场景中测试 COCOM 与不同值分解框架的结合效果，比较 \texttt{VDN}、\texttt{QMIX} 及其对应组合版本 \texttt{COCOM-VDN}、\texttt{COCOM-QMIX}。
+
+\begin{center}
+\includegraphics[width=0.92\textwidth,keepaspectratio]{figures_from_AAAI_2025_通信/fig5.png}
+\\[-0.2em]
+{\wuhao 图5：GRF 场景示意与实验结果（对应论文 Figure 5）。}
+\end{center}
+
+结果表明，COCOM 与不同值分解算法结合后均显著提升原算法表现，说明其具备良好的框架兼容性与可扩展性。
+
+\section*{结论}
+
+本文提出 COCOM，一种结合显式通信与隐式共识学习的高效通信方法。COCOM 通过局部观测推断共享共识，在通信中断时仍能稳定决策，并进一步利用共识生成更简洁的消息。实验表明，COCOM 在多种场景下表现优异且显著降低通信开销。COCOM 还可与不同值分解变体集成以增强现有算法。当前 COCOM 将消息广播给全部队友；未来将探索个性化消息生成，以进一步拓展适用范围。随着多智能体研究对算法实用性要求不断提升，COCOM 的高效率与低通信成本对未来研究将具有显著优势。
+
+\section*{致谢}
+
+本项目得到中国科学院战略性先导科技专项（Grant No. XDA27050100）支持。

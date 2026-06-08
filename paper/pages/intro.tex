@@ -36,35 +36,63 @@
 协作场景下，每个智能体通常只能看到环境的局部，如果缺乏额外协同机制，就很难形成高质量的联合策略，
 因此多智能体强化学习（Multi-Agent Reinforcement Learning, MARL）成为当前智能决策研究的重要方向。
 
-为兼顾训练阶段的全局信息利用与执行阶段的可部署性，
-集中式训练、分布式执行（Centralized Training and Decentralized Execution, CTDE）
-已成为主流范式，相关代表方法包括 MADDPG、COMA、QMIX、QTRAN、QPLEX 和 MAPPO 等\cite{lowe2017maddpg,foerster2018coma,rashid2018qmix,son2019qtran,wang2021qplex,yu2021mappo}。
-然而，CTDE 并没有消除执行期智能体之间的信息缺口，
-因此显式通信仍是协作型 MARL 的关键问题，相关研究已经从 CommNet、DIAL 一类早期可微通信框架发展到 TarMAC、ATOC 等更具选择性的注意力通信方法\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional}。
-近年来，研究者又进一步从对比式消息表征、上下文感知通信、稀疏调度、图瓶颈压缩、身份感知表达、因果协同以及可解释通信等角度推进这一方向，说明显式通信研究已经从“能否通信”逐步转向“如何在低成本条件下高质量通信”\cite{lo2024learning,li2024cacom,han2023mbc,kim2019schednet,ding2024magi,du2024ideal,du2024scic,sun2025drmac,li2024languagegroundedmarl}。
-尽管如此，如何在保证低带宽代价的前提下，使通信特征稳定、无损地介入局部决策并促成战术共识，仍是协作型 MARL 面临的核心难题。
+为兼顾训练阶段的全局协同与执行阶段的局部可部署性，集中式训练、分布式执行（Centralized Training and Decentralized Execution, CTDE）逐渐成为协作型 MARL 的重要范式。该范式能够在训练阶段利用更多全局信息，但在执行阶段仍要求智能体依据局部观测独立决策，因此并未完全消除部分可观测带来的信息缺口。
+
+显式通信正是在这一缺口上发挥作用：它允许智能体在执行期交换有限信息，以补充局部观测之外的队友意图、局部计划或协同偏好。对于本文关注的协作微操任务而言，通信的关键并不只是“是否存在消息通路”，而是消息能否在有限通信代价下稳定进入动作决策，并在真正需要协同的状态中产生可验证的决策影响。由此，低成本、稳定且可解释的信息交互机制成为本文研究的核心问题。
 
 \section{国内外研究现状}
 \esection{Related Research Status}
 
-现有研究主要沿两条路线展开。第一条路线关注协作决策框架本身，
-从 IQL 到 VDN、QMIX、QTRAN、QPLEX，再到 MADDPG、COMA、MAPPO、HAPPO、FACMAC 和 MAT，
-核心目标是缓解多智能体训练中的非平稳性与信用分配问题\cite{tan1993iql,sunehag2018vdn,rashid2018qmix,son2019qtran,wang2021qplex,lowe2017maddpg,foerster2018coma,yu2021mappo,kuba2022happo,peng2021facmac,wen2022mat}。
-第二条路线直接面向执行期信息不足，通过显式通信来补充局部观测之外的状态信息、行为意图或激励信号，
-代表工作包括 CommNet、DIAL、TarMAC、ATOC、IC3Net、SchedNet 和 MAIC\cite{sukhbaatar2016commnet,foerster2016dial,das2019tarmac,jiang2018attentional,singh2018ic3net,kim2019schednet,yuan2022maic}。
-近年的研究进一步表明，通信设计的关注点已经扩展到结构化拓扑、上下文感知消息、鲁棒压缩、身份感知表达、人类可解释语义以及有限通信条件下的异步协作\cite{sheng2023lsc,li2024cacom,ding2024magi,du2024ideal,li2024languagegroundedmarl,dolan2025asyncomarl}。
-与此同时，大模型时代的多智能体协作也开始把信息不对称、长程协商和显式信息交换重新带回研究中心，说明“协作中如何交换正确的信息”正在成为更广义多智能体系统的共同问题\cite{liu2024iagents}。
+本节从宏观研究格局出发，对国内外相关工作进行概括；第二章则进一步围绕本文方法所依赖的技术基础展开细化分析。下文先简要回顾相关综述文献对问题脉络的整理，再从协作决策主干和显式通信机制两条路线概括现有研究进展。
 
-总体上，相关研究已经从广播式通信发展到注意力路由、门控稀疏通信和队友建模，
-但仍存在两个突出问题：
-其一，通信支路常常难以稳定进入动作层并真正改变决策；
-其二，增加通信能力往往伴随更高带宽、更强的训练不稳定性和更弱的可解释性。
-基于这一观察，本文不追求继续扩大通信容量，而是更关注低通信代价条件下，通信如何以受控方式进入局部动作修正过程。
+从综述层面上，
+刘全等梳理了深度强化学习的基本框架、代表算法与应用场景，
+为后续理解深度 MARL 提供了基础背景\cite{liu2018drlsurvey_cn}。
+刘建伟等进一步从值函数方法和策略梯度方法两个分支总结了深度强化学习算法的发展脉络\cite{liu2019valuepolicydrl_cn}。
+孙长银和穆朝絮聚焦多智能体深度强化学习中的非平稳性、通信协作和可扩展性等关键科学问题\cite{sun2020madrkey_cn}。
+梁星星等对多Agent深度强化学习的任务建模、训练范式和算法路线进行了综述\cite{liang2020multiagentdrlsurvey_cn}。
+丁世飞等系统总结了多智能体深度强化学习的研究进展，覆盖值分解、通信机制和协同学习等方向\cite{ding2024madrlprogress_cn}。
+罗彪等则从控制与决策视角梳理了多智能体强化学习在复杂系统中的建模与应用问题\cite{luo2025marlcontrol_cn}。
+
+协作决策主干方面，相关研究的核心目标是缓解多智能体训练中的非平稳性与信用分配问题。
+Multi-Agent Reinforcement Learning: Independent versus Cooperative Agents
+较早揭示了独立学习与协作学习之间的差异\cite{tan1993iql}；
+Value-Decomposition Networks For Cooperative Multi-Agent Learning Based On Team Reward
+代表了团队回报分解到个体价值函数的思路\cite{sunehag2018vdn}；
+QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning
+进一步推动了值分解方法在 CTDE 范式中的应用\cite{rashid2018qmix}。
+Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments
+代表了集中式 actor-critic 路线\cite{lowe2017maddpg}；
+The Surprising Effectiveness of PPO in Cooperative Multi-Agent Games
+说明了多智能体 Proximal Policy Optimization（PPO）作为协作强基线的价值\cite{yu2021mappo}。
+Multi-Agent Reinforcement Learning Is a Sequence Modeling Problem
+则体现了将协作决策重新表述为序列建模问题的趋势\cite{wen2022mat}。
+围绕具体算法问题，中文期刊中的相关工作也对协作决策主干进行了补充探索。
+徐诚等提出基于奖励滤波信用分配的多智能体深度强化学习算法，用于缓解团队奖励下个体贡献难以区分的问题\cite{xu2022rewardfilter_cn}。
+丁世飞等提出基于双评论家的多智能体深度确定性策略梯度方法，以改善集中式评论家估计偏差对策略学习的影响\cite{ding2023maddpgdc_cn}。
+李静晨等将自注意力机制和策略映射重组引入多智能体强化学习，以增强智能体间关系建模能力\cite{li2022selfattention_cn}。
+田树聪等面向参数化动作空间提出多智能体中心化策略梯度分解方法，拓展了协作策略优化在复杂动作结构中的适用性\cite{tian2025fmacparam_cn}。
+显式通信机制方面，相关工作直接面向执行期信息不足问题，尝试通过消息交换补充局部观测之外的状态信息、行为意图或激励信号。
+早期可微通信框架和注意力通信框架说明了通信学习的可行性，但后续研究逐渐把重点转向通信时机、消息质量和接收端利用方式。
+Learning to Schedule Communication in Multi-agent Reinforcement Learning
+从通信调度角度减少不必要的信息交换\cite{kim2019schednet}；
+Multi-Agent Incentive Communication via Decentralized Teammate Modeling
+通过分散式队友建模构造激励性通信信号\cite{yuan2022maic}。
+Context-aware Communication for Multi-agent Reinforcement Learning
+面向带宽受限场景生成接收者相关消息\cite{li2024cacom}；
+Expressive Multi-Agent Communication via Identity-Aware Learning
+利用身份感知表示缓解消息传递中的同质化问题\cite{du2024ideal}；
+Language Grounded Multi-Agent Reinforcement Learning with Human-Interpretable Communication
+则进一步关注通信协议的人类可解释性\cite{li2024languagegroundedmarl}。
+王涵等从通信 MARL 角度系统梳理了该方向的整体演进\cite{wang2022commmarl_cn}。
+张亦弛等关于面向智能体的语义通信研究，也提示通信质量需要从“传输符号”进一步转向“影响接收端行为”\cite{zhang2022semanticcomm_cn}。
+
+总体来看，现有研究已经从广播式通信发展到注意力路由、门控稀疏通信、队友建模和语义化表达，但仍存在两个突出问题：其一，通信支路常常难以稳定进入动作层并真正改变决策；其二，增加通信能力往往伴随更高带宽、更强训练耦合和更弱可解释性。基于这一观察，本文不追求继续扩大通信容量，而是更关注低通信代价条件下，通信如何以受控方式进入局部动作修正过程。
 
 \section{本文研究内容与主要工作}
 \esection{Research Content and Main Contributions}
 
-围绕低通信代价条件下的显式协同问题，本文以 MAPPO 为基础框架，围绕“通信如何稳定、可解释地进入动作决策”这一核心目标开展研究。结合本文的算法设计与实验结果，主要工作可概括为以下四点。
+围绕低通信代价条件下的显式协同问题，本文以多智能体近端策略优化（Multi-Agent Proximal Policy Optimization, MAPPO）为基础框架，围绕“通信如何稳定、可解释地进入动作决策”这一核心目标开展研究。结合本文的算法设计与实验结果，主要工作可概括为以下四点。
 
 第一，本文提出了一种两阶段训练范式。先训练稳定的无通信主干策略，再进行通信热启动微调，
 从而将主干训练动力学与通信增益区分开来。该范式既避免了通信噪声在训练初期直接破坏局部策略学习，也为后续通信机制的可比性提供了统一起点。
@@ -92,8 +120,8 @@
 
 本文共分为六章。
 第一章为绪论，主要介绍研究背景、国内外研究现状、本文研究内容以及论文整体结构。
-第二章综述多智能体强化学习与信息交互的相关理论基础，并梳理现有通信方法与本文工作的联系。
-第三章介绍通信框架设计，重点说明 MAPPO 协作决策主干、残差式通信建模方式以及执行期通信代价度量。
+第二章介绍多智能体强化学习与信息交互的相关理论与技术基础，并梳理现有通信方法与本文工作的联系。
+第三章介绍通信框架设计，重点说明多智能体近端策略优化（MAPPO）协作决策主干、残差式通信建模方式以及执行期通信代价度量。
 第四章介绍通信机制设计，系统给出从最小侵入通信到双流残差通信主线的机制演化过程。
 第五章给出实验结果分析，围绕实验设置、结果比较、通信隔离评估与决策影响诊断展开讨论，并进一步说明所提方法的性能边界与机制边界。
 第六章总结全文工作，并对后续研究方向进行展望。
